@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aria2 Bridge 设置</title><link rel="stylesheet" href="../styles.css"><script src="options.js" defer></script></head>
+<body class="options"><main>
+<h1>Aria2 Bridge 设置</h1>
+<p>文件保存到 aria2 所在机器。Secret 保存在此 Firefox 配置中，导出文件不包含 Secret。开启 Cookie 转发后，登录凭证会发送给选定的 RPC 服务。</p>
+<form id="settings">
+<div id="servers"></div><button id="new" type="button" class="secondary">添加 RPC 服务</button>
+<fieldset><legend>自动接管</legend>
+<label class="toggle"><input id="enabled" type="checkbox"> 启用（请先成功测试默认 RPC）</label>
+<p>仅接管来源明确的 HTTP(S) GET 下载；隐私窗口、POST 和无法可靠确认登录态的任务继续由 Firefox 下载。排除规则优先，允许列表为空时不限制。</p>
+<div class="filters">
+<label>允许域名<textarea id="allowDomains" rows="3" placeholder="example.com&#10;*.example.org"></textarea></label>
+<label>排除域名<textarea id="denyDomains" rows="3"></textarea></label>
+<label>允许扩展名<textarea id="allowExtensions" rows="3" placeholder="zip&#10;tar.gz"></textarea></label>
+<label>排除扩展名<textarea id="denyExtensions" rows="3" placeholder="pdf"></textarea></label>
+</div>
+</fieldset><button type="submit">保存设置</button>
+</form>
+<p id="status" role="status"></p>
+<nav><button id="manager" type="button">打开 AriaNg</button><button id="export" type="button" class="secondary">导出配置</button><label>导入配置 <input id="import" type="file" accept="application/json,.json"></label></nav>
+<h2>下载交接记录</h2><p>“交接待确认”时不会重复提交。继续浏览器下载前会核对并停止 aria2 任务。原任务不能恢复时，请从原页面重试。</p>
+<button id="refresh-handoffs" type="button" class="secondary">刷新记录</button><div id="handoffs"></div>
+</main></body></html>

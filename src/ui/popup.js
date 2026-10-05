@@ -1,0 +1,43 @@
+import { $, send, speed, serverOptions, textStatus } from './common.js';
+let config;
+async function update() {
+  const s = await send('STATUS', { refresh: true });
+  textStatus(`${s.note} · ↓ ${speed(s.downloadSpeed)} · ↑ ${speed(s.uploadSpeed)}`);
+}
+async function init() {
+  config = await send('CONFIG_PUBLIC');
+  serverOptions($('#server'), config);
+  $('#enabled').checked = config.enabled;
+  await update();
+  const records = await send('HANDOFFS');
+  const pending = records.filter(r => ['pending', 'conflict', 'accepted', 'cancelling', 'cancelled', 'submitting'].includes(r.state)).length;
+  $('#pending').textContent = pending ? `${pending} 个交接待确认：在设置页核对` : '';
+}
+$('#enabled').addEventListener('change', async () => {
+  try { config.enabled = await send('SET_ENABLED', { enabled: $('#enabled').checked }); }
+  catch (error) { $('#enabled').checked = config.enabled; textStatus(error.message); }
+});
+$('#server').addEventListener('change', async () => {
+  try {
+    await send('SELECT_SERVER', { serverId: $('#server').value });
+    config = await send('CONFIG_PUBLIC');
+    $('#enabled').checked = false; await update();
+  } catch (error) { $('#server').value = config.defaultServerId; textStatus(error.message); }
+});
+$('#test').addEventListener('click', async () => {
+  try { const version = await send('TEST', { serverId: $('#server').value }); textStatus(`连接成功 · aria2 ${version.version}，现在可以开启接管`); }
+  catch (error) { textStatus(error.message); }
+});
+$('#links').addEventListener('submit', async event => {
+  event.preventDefault(); $('#add').disabled = true;
+  try {
+    const result = await send('ADD', { serverId: $('#server').value, links: $('#urls').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean) });
+    textStatus(result.map(r => `${r.state === 'added' ? '已添加' : r.state === 'rejected' ? '被拒绝' : '结果待确认，请勿重复发送'} · ${r.gid}`).join('\n'));
+    $('#urls').value = '';
+  } catch (error) { textStatus(error.message); }
+  finally { $('#add').disabled = false; }
+});
+$('#manager').addEventListener('click', () => send('OPEN_MANAGER').then(() => window.close()).catch(e => textStatus(e.message)));
+$('#sidebar').addEventListener('click', () => browser.sidebarAction.open().then(() => window.close()).catch(e => textStatus(e.message)));
+$('#options').addEventListener('click', () => browser.runtime.openOptionsPage());
+init().catch(e => textStatus(e.message));

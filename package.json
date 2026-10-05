@@ -1,0 +1,18 @@
+{
+  "name": "aria2-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Firefox 140+ download handoff and bundled AriaNg",
+  "type": "module",
+  "packageManager": "pnpm@12.9.0",
+  "scripts": {
+    "dev": "pnpm compile && web-ext run --source-dir build/extension",
+    "compile": "node scripts/build.mjs",
+    "lint": "eslint . && pnpm compile && node scripts/lint-webext.mjs",
+    "test": "node --test --test-isolation=none",
+    "build": "pnpm compile && web-ext build --source-dir build/extension --artifacts-dir dist --overwrite-dest && node scripts/checksums.mjs",
+    "test:firefox": "node scripts/firefox-smoke.mjs"
+  },
+  "engines": { "node": ">=22" },
+  "devDependencies": { "esbuild": "0.25.10", "eslint": "9.39.1", "web-ext": "10.7.0" }
+}

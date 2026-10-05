@@ -1,0 +1,30 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
+
+body { margin: 0; }
+main { padding: 24px; }
+.popup { width: 380px; }
+.options main { max-width: 860px; margin: 24px auto; }
+h1 { font-size: 22px; margin: 0 0 16px; }
+p { line-height: 1.6; }
+form { display: grid; gap: 12px; }
+input, button, select, textarea { font: inherit; padding: 10px 12px; border-radius: 6px; }
+input, select, textarea { border: 1px solid #888; }
+label { display: grid; gap: 6px; margin: 10px 0; }
+textarea { resize: vertical; }
+nav { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; align-items: center; }
+.toggle { display: flex; align-items: center; }
+fieldset { border: 1px solid #888; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+fieldset button, article button { margin-right: 10px; }
+.filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.secondary { background: #506071; }
+article { border-bottom: 1px solid #888; padding: 16px 0; overflow-wrap: anywhere; }
+#status { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .filters { grid-template-columns: 1fr; } }
+button { border: 0; background: #0060df; color: #fff; cursor: pointer; }
+button:hover { background: #0250bb; }
+button:disabled { opacity: 0.5; cursor: default; }
+:focus-visible { outline: 2px solid #008cff; outline-offset: 3px; }

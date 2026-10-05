@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Aria2 Bridge",
+  "version": "0.1.0",
+  "description": "Firefox 下载可靠交接到 aria2，内置 AriaNg 标签页与侧栏。",
+  "permissions": ["storage", "downloads", "webRequest", "cookies", "menus", "alarms", "notifications", "tabs", "contextualIdentities"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "icons": { "48": "icon.svg", "96": "icon.svg" },
+  "background": { "scripts": ["background.js"] },
+  "action": {
+    "default_icon": "icon.svg",
+    "default_title": "Aria2 Bridge",
+    "default_popup": "popup/index.html"
+  },
+  "sidebar_action": { "default_title": "Aria2 Bridge", "default_panel": "manager/index.html", "default_icon": "icon.svg" },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none';" },
+  "options_ui": {
+    "page": "options/index.html",
+    "open_in_tab": true
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "aria2-bridge@hsopex.github.io",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": { "required": ["authenticationInfo", "browsingActivity", "websiteContent"] }
+    }
+  }
+}

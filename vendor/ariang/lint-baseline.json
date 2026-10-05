@@ -1,0 +1,6 @@
+{
+  "KEY_FIREFOX_ANDROID_UNSUPPORTED_BY_MIN_VERSION:manifest.json": 1,
+  "UNSAFE_VAR_ASSIGNMENT:manager/js/plugins-b3cb190423.min.js": 6,
+  "UNSAFE_VAR_ASSIGNMENT:manager/js/angular-packages-1.6.10.min.js": 5,
+  "UNSAFE_VAR_ASSIGNMENT:manager/js/echarts-common-3.8.5.min.js": 6
+}
