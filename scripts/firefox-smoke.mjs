@@ -10,6 +10,15 @@ import { spawn } from 'node:child_process';
 const webdriver = process.env.GECKODRIVER_URL || 'http://127.0.0.1:4444';
 const binary = process.env.FIREFOX_BINARY || '/usr/bin/firefox';
 const temp = await mkdtemp(`${tmpdir()}/aria2-bridge-smoke-`);
+const testHome = `${temp}/home`;
+const testConfig = `${testHome}/.config`;
+await mkdir(testConfig, { recursive: true });
+const testEnv = { HOME: testHome, XDG_CONFIG_HOME: testConfig, XDG_CACHE_HOME: `${testHome}/.cache`, XDG_DATA_HOME: `${testHome}/.local/share`, MOZ_APP_REMOTINGNAME: 'aria2-bridge-smoke', MOZ_NO_REMOTE: '1' };
+// geckodriver also probes Firefox's version before applying firefoxOptions.env.
+// Wrap every invocation, including that probe, to prevent legacy HOME writes.
+const shellQuote = value => "'" + value.replaceAll("'", "'\"'\"'") + "'";
+const isolatedBinary = `${temp}/firefox-isolated`;
+await writeFile(isolatedBinary, `#!/bin/sh\n${Object.entries(testEnv).map(([key, value]) => `export ${key}=${shellQuote(value)}`).join('\n')}\nexec ${shellQuote(resolve(binary))} "$@"\n`, { mode: 0o700 });
 const received = [];
 const server = createServer((req, res) => {
   const u = new URL(req.url, 'http://localhost');
@@ -57,7 +66,7 @@ async function until(action, predicate, label, timeout = 15000) {
 }
 let session;
 try {
-  const created = await request('/session', { capabilities: { alwaysMatch: { browserName: 'firefox', 'moz:firefoxOptions': { binary, args: ['-headless', '-remote-allow-system-access'], prefs: {
+  const created = await request('/session', { capabilities: { alwaysMatch: { browserName: 'firefox', 'moz:firefoxOptions': { binary: isolatedBinary, env: testEnv, args: ['-headless', '-no-remote', '-remote-allow-system-access'], prefs: {
     'browser.shell.checkDefaultBrowser': false, 'browser.download.folderList': 2, 'browser.download.dir': `${temp}/browser`, 'browser.download.useDownloadDir': true,
     'browser.helperApps.neverAsk.saveToDisk': 'application/octet-stream', 'browser.download.always_ask_before_handling_new_types': false,
     'network.cookie.cookieBehavior': 5,
@@ -71,6 +80,8 @@ try {
   const navigate = url => request(route('/url'), { url });
   const addon = await request(route('/moz/addon/install'), { path: resolve('dist/aria2_bridge-0.1.0.zip'), temporary: true });
   await request(route('/moz/context'), { context: 'chrome' });
+  assert.equal(await execute("return Services.env.get('HOME');"), testHome, 'Firefox must use the isolated test HOME');
+  assert.equal(await execute("return Services.env.get('XDG_CONFIG_HOME');"), testConfig, 'Firefox must use the isolated test XDG config');
   const base = await execute("return ChromeUtils.importESModule('resource://gre/modules/ExtensionParent.sys.mjs').ExtensionParent.GlobalManager.extensionMap.get(arguments[0]).baseURI.spec;", [addon]);
   await request(route('/moz/context'), { context: 'content' });
   await navigate(base + 'options/index.html');

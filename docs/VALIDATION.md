@@ -35,10 +35,14 @@
 | 远端轮换 Secret | code 1 不直接当成 GID 不存在，先验证授权；恢复不误判，通过 |
 | Secret 保护 | 默认导出清空 Secret；RPC POST、省略请求站点 Cookie、拒绝 RPC 重定向；日志／持久化交接不含凭证，通过 |
 
-实机脚本：`scripts/firefox-smoke.mjs`。进程禁用 aria2 用户配置，使用临时 Firefox profile、独立测试 Secret、临时下载目录；结束后删除临时数据。脚本会保留管理页与设置页的浅色／深色／窄窗口截图到 `dist/validation/`。不需要真实账户或用户的下载服务。
+实机脚本：`scripts/firefox-smoke.mjs`。进程禁用 aria2 用户配置，使用临时 Firefox profile、隔离的 HOME／XDG 目录和独立的远程实例名称、独立测试 Secret、临时下载目录；结束后删除临时数据。脚本会保留管理页与设置页的浅色／深色／窄窗口截图到 `dist/validation/`。不需要真实账户或用户的下载服务。
 
 ## 发布前人工验收
 
 以下不能用当前本机夹具替代：用户实际远程 HTTP(S) 服务的证书／防火墙／代理、真实站点的复杂登录与验证码、Windows/macOS 文件系统差异、图形界面的日常使用和无障碍体验。特别是认证服务对 User-Agent、Cookie、IP、客户端证书或一次性 URL 的绑定，需在实际服务验证。
 
 故障注入覆盖了后台重启状态恢复，尚未人为杀死真实 Firefox 后台进程做崩溃时序穷举。实机侧栏已打开，但所有任务操作尚未逐项在侧栏 UI 人工点击。真实互联网服务和 AMO 签名需要用户环境／凭据。ZIP 尚未签名；商店上架不在本次范围。
+
+## 测试环境修正
+
+旧版 Firefox 即使使用临时 profile，也可能在真实 HOME 下创建 `~/.mozilla/firefox/`，影响新版 Firefox 对 XDG 配置目录的选择（Mozilla bug 2003137）。实机脚本现使用临时启动包装器，将 geckodriver 的版本探测及 Firefox 子进程全部放入临时 HOME／XDG 目录，禁止远程实例复用，并在 Firefox 内断言环境隔离生效；测试结束一起清理。Firefox 140／157 复验通过，真实用户目录不再创建冲突的 `~/.mozilla/firefox/`。
