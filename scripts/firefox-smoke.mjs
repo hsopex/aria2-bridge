@@ -1,3 +1,4 @@
+import { preferenceDefaults } from '../src/core/manager-preferences.js';
 // Runs against a local geckodriver. All browser profiles and aria2 data are temporary.
 // Usage: GECKODRIVER_URL=http://127.0.0.1:4444 FIREFOX_BINARY=/usr/bin/firefox pnpm test:firefox
 import assert from 'node:assert/strict';
@@ -104,6 +105,15 @@ try {
   await navigate(base + 'options/index.html');
   await execute('const select=document.querySelector("#theme"); select.value="system"; select.dispatchEvent(new Event("change",{bubbles:true}));');
   await until(() => request(route('/execute/async'), { script: 'const done=arguments[arguments.length-1]; browser.storage.local.get("appearance").then(v=>done(v.appearance?.theme));', args: [] }), theme => theme === 'system', 'system theme saved');
+  await until(() => execute('return !!document.querySelector("#manager-language")'), Boolean, 'manager preferences rendered');
+  const managed = { language: 'zh_Hans', keyboardShortcuts: false, confirmTaskRemoval: false, title: 'Bridge ${title}', taskListIndependentDisplayOrder: true, displayOrder: 'name:asc', waitingTaskListPageDisplayOrder: 'size:desc', stoppedTaskListPageDisplayOrder: 'percent:desc', fileListDisplayOrder: 'size:desc', peerListDisplayOrder: 'client:asc', showPiecesInfoInTaskDetailPage: 'never', rpcListDisplayOrder: 'rpcAlias' };
+  for (const [key, value] of Object.entries(managed)) {
+    await execute('const input=document.getElementById("manager-"+arguments[0]); if(input.type==="checkbox") input.checked=arguments[1]; else input.value=String(arguments[1]); input.dispatchEvent(new Event("change",{bubbles:true}));', [key, value]);
+    await until(() => message('MANAGER_PREFERENCES_GET'), prefs => prefs[key] === value, `manager preference ${key} saved`);
+  }
+  await navigate(base + 'options/index.html');
+  await until(() => execute('return document.querySelector("#manager-language")?.value'), value => value === 'zh_Hans', 'manager preferences restored');
+  await assert.rejects(message('MANAGER_PREFERENCES_PATCH', { patch: { secret: 'forbidden' } }));
   console.log(`Firefox ${created.capabilities.browserVersion}: settings light/dark/system, reload persistence, popup theme, narrow layout and default-service editing passed`);
   let config = await message('CONFIG_GET');
   config.servers[0] = { ...config.servers[0], url: `http://127.0.0.1:${rpcPort}/jsonrpc`, secret, dir: `${temp}/aria2`, forwardCookies: true };
@@ -121,6 +131,29 @@ try {
   const manager = await until(() => execute('return {body:document.body.innerText, angular:typeof angular, injector:typeof angular !== "undefined" && !!angular.element(document).injector()}'), r => r.injector, 'AriaNg CSP bootstrap');
   assert.ok(!manager.body.includes('后台未就绪'));
   await until(() => execute('return angular.element(document.querySelector(".wrapper")).scope().taskContext.rpcStatus'), s => s === 'Connected', 'AriaNg adapter connected');
+  const actual = await execute('return angular.element(document).injector().get("ariaNgSettingService").getAllOptions()');
+  for (const [key, value] of Object.entries({ ...preferenceDefaults(), ...managed })) assert.equal(actual[key], value, `native preference ${key}`);
+  await execute('angular.element(document).injector().get("ariaNgSettingService").setDisplayOrder("dspeed:desc", "downloading");');
+  await until(() => message('MANAGER_PREFERENCES_GET'), prefs => prefs.displayOrder === 'dspeed:desc', 'native sorting persisted to plugin preferences');
+  await execute('window.bridgeThemeProbe="kept";');
+  for (const theme of ['dark', 'light', 'system']) {
+    await request(route('/execute/async'), { script: 'const done=arguments[arguments.length-1]; browser.storage.local.set({appearance:{theme:arguments[0]}}).then(done);', args: [theme] });
+    await until(() => execute('return angular.element(document).injector().get("ariaNgSettingService").getTheme()'), value => value === theme, 'live manager theme');
+    assert.equal(await execute('return window.bridgeThemeProbe'), 'kept', 'theme changes preserve the management document');
+    if (theme !== 'system') assert.equal(await execute('return document.body.classList.contains("theme-dark")'), theme === 'dark');
+    if (theme === 'dark') await writeFile(`dist/validation/firefox-${created.capabilities.browserVersion}-manager-dark.png`, Buffer.from(await request(route('/screenshot'), undefined, 'GET'), 'base64'));
+  }
+  await message('MANAGER_PREFERENCES_PATCH', { patch: { language: 'en', keyboardShortcuts: true, globalStatRefreshInterval: 2000 } });
+  await until(() => execute('return typeof angular!=="undefined" && angular.element(document).injector()?.get("ariaNgSettingService").getGlobalStatRefreshInterval()'), v => v === 2000, 'refresh interval applied after reload');
+  await message('MANAGER_PREFERENCES_PATCH', { patch: { language: 'zh_Hans', keyboardShortcuts: false } });
+  await until(() => execute('return angular.element(document).injector().get("ariaNgSettingService").getLanguage()'), v => v === 'zh_Hans', 'language changed live');
+  await until(() => execute('return angular.element(document.querySelector(".wrapper")).scope().taskContext.rpcStatus'), s => s === 'Connected', 'RPC survives preference updates');
+  await navigate(base + 'manager/index.html#!/settings/ariang');
+  await until(() => execute('return document.querySelector("[ng-view]")?.innerText || ""'), text => text.includes('均由插件设置统一管理'), 'native settings redirect to plugin');
+  assert.equal(await execute('return document.querySelectorAll("[ng-view] select, [ng-view] input").length'), 0, 'no editable native settings');
+  await navigate(base + 'manager/index.html#!/downloading');
+  await until(() => execute('return typeof angular!=="undefined" && !!angular.element(document).injector()'), Boolean, 'manager restored');
+  console.log(`Firefox ${created.capabilities.browserVersion}: plugin-managed native preferences, live themes/language, interval reload and RPC separation passed`);
   await mkdir('dist/validation', { recursive: true });
   await writeFile(`dist/validation/firefox-${created.capabilities.browserVersion}-manager.png`, Buffer.from(await request(route('/screenshot'), undefined, 'GET'), 'base64'));
   for (const hash of ['#!/new', '#!/settings/aria2/basic', '#!/status', '#!/waiting', '#!/stopped']) {
@@ -135,6 +168,11 @@ try {
   const sidebar = await execute('const w = Services.wm.getMostRecentWindow("navigator:browser"); return w.SidebarController.currentID;');
   assert.equal(sidebar, sidebarId);
   await request(route('/moz/context'), { context: 'content' });
+  const sidebarPreferences = await until(() => execute('const win=browser.extension.getViews({type:"sidebar"})[0]; if(!win?.angular)return null; const injector=win.angular.element(win.document).injector(); if(!injector)return null; const service=injector.get("ariaNgSettingService"); return {language:service.getLanguage(), keyboard:service.getKeyboardShortcuts(), interval:service.getGlobalStatRefreshInterval(), theme:service.getTheme()};'), value => value?.language === 'zh_Hans', 'sidebar shares managed preferences');
+  assert.deepEqual(sidebarPreferences, {language:'zh_Hans',keyboard:false,interval:2000,theme:'system'});
+  await request(route('/execute/async'), { script: 'const done=arguments[arguments.length-1]; browser.storage.local.set({appearance:{theme:"dark"}}).then(done);', args: [] });
+  await until(() => execute('return browser.extension.getViews({type:"sidebar"})[0]?.document.body.classList.contains("theme-dark")'), Boolean, 'sidebar applies theme live');
+  await request(route('/execute/async'), { script: 'const done=arguments[arguments.length-1]; browser.storage.local.set({appearance:{theme:"system"}}).then(done);', args: [] });
   await navigate(base + 'options/index.html');
   // Distinct container accounts at the same origin. Cookies are observed on each actual request.
   await execute('window.bridgeProbe=[]; browser.webRequest.onBeforeRequest.addListener(d => window.bridgeProbe.push(d), {urls:[arguments[0]+"/*"]});', [site]);

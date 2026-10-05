@@ -21,7 +21,18 @@ The maintained adaptation is `scripts/build.mjs` plus `src/ui/manager.js`:
 - Replace the RPC selection menu with Bridge servers. Selecting one updates the
   default and disables auto takeover until deliberately enabled again. Tab/sidebar
   reload when Bridge configuration changes. Preserve all aria2 task and settings
-  routes. Task and speed refresh intervals are fixed at one second while open.
+  routes. Task and speed refresh intervals default to one second while open,
+  configurable in Bridge with a one-second minimum. Interval changes reload open
+  managers; other presentation preferences apply live.
+- Bridge owns a versioned, allowlisted AriaNg preference store (language, title,
+  notification, task interaction, sorting and detail display). Apply these through
+  the original native setting service before bootstrap. Persist native sorting
+  actions back to the same store. RPC fields, debug mode and native settings
+  import/export remain inaccessible. The replaced settings route contains only
+  the Bridge entry point.
+- Use AriaNg's native light/dark/system theme implementation with Bridge's shared
+  appearance preference; theme updates do not reload the manager. Tab and sidebar
+  use the same storage listeners and native preference setters.
 
 `lint-baseline.json` records only the pinned upstream DOM assignment warnings and
 one intentional desktop-only sidebar compatibility warning. These DOM assignments

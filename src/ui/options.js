@@ -1,3 +1,4 @@
+import { preferenceGroups } from '../core/manager-preferences.js';
 import { $, send, showHandoffs } from './common.js';
 import { setTheme } from './theme.js';
 let config;
@@ -165,3 +166,60 @@ window.addEventListener('beforeunload', event => { if (dirty) { event.preventDef
 send('CONFIG_GET').then(async data => {
   config = data; render(); setDirty(false); $('#export').disabled = false; $('#import').disabled = false; await handoffs();
 }).catch(e => status(e.message, 'error'));
+
+const preferenceControls = new Map();
+function renderManagerPreferences(values) {
+  for (const [key, input] of preferenceControls) {
+    const value = values[key];
+    if (input.type === 'checkbox') input.checked = value; else input.value = String(value);
+  }
+}
+async function initializeManagerPreferences() {
+  const values = await send('MANAGER_PREFERENCES_GET');
+  $('#manager-preference-fields').replaceChildren();
+  for (const group of preferenceGroups) {
+    const title = document.createElement('h3'); title.textContent = group.label;
+    const grid = document.createElement('div'); grid.className = 'server-grid preference-grid';
+    for (const f of group.fields) {
+      const label = document.createElement('label'); label.className = f.type === 'boolean' ? 'toggle' : 'field';
+      const span = document.createElement('span'); span.textContent = f.label;
+      const input = document.createElement(f.type === 'select' ? 'select' : 'input');
+      input.id = `manager-${f.key}`;
+      if (f.type === 'select') for (const [value, text] of f.options) {
+        const option = document.createElement('option'); option.value = String(value); option.textContent = text; input.append(option);
+      }
+      else input.type = f.type === 'boolean' ? 'checkbox' : 'text';
+      if (f.type === 'text') input.maxLength = 500;
+      if (f.type === 'boolean') label.append(input, span); else label.append(span, input);
+      if (f.hint) { const hint = document.createElement('small'); hint.className = 'field-hint'; hint.textContent = f.hint; label.append(hint); }
+      preferenceControls.set(f.key, input); grid.append(label);
+      input.addEventListener('change', async () => {
+        const previous = values[f.key];
+        const value = f.type === 'boolean' ? input.checked : typeof f.default === 'number' ? Number(input.value) : input.value;
+        input.disabled = true;
+        try {
+          if (f.key === 'browserNotification' && value && window.Notification?.permission !== 'granted') {
+            if (!window.Notification || await window.Notification.requestPermission() !== 'granted') throw new Error('请在 Firefox 中允许此扩展显示通知后重试');
+          }
+          const saved = await send('MANAGER_PREFERENCES_PATCH', { patch: { [f.key]: value } });
+          Object.assign(values, saved);
+          $('#manager-preference-status').textContent = `${f.label}已保存`;
+          $('#manager-preference-status').dataset.kind = 'success';
+        } catch (error) {
+          if (input.type === 'checkbox') input.checked = previous; else input.value = String(previous);
+          $('#manager-preference-status').textContent = error.message;
+          $('#manager-preference-status').dataset.kind = 'error';
+        } finally { input.disabled = false; }
+      });
+    }
+    $('#manager-preference-fields').append(title, grid);
+  }
+  renderManagerPreferences(values);
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.managerPreferences) {
+      Object.assign(values, changes.managerPreferences.newValue.options);
+      renderManagerPreferences(values);
+    }
+  });
+}
+initializeManagerPreferences().catch(e => { $('#manager-preference-status').textContent = e.message; });

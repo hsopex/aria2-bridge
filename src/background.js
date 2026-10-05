@@ -1,3 +1,4 @@
+import { readPreferences, validatePreferencePatch } from './core/manager-preferences.js';
 import { defaults, normalizeConfig, serverSignature, exportConfig, validateLink } from './core/config.js';
 import { rpc, makeGid } from './core/rpc.js';
 import { matchesFilters } from './core/rules.js';
@@ -7,6 +8,8 @@ import { Journal, Handoff, activeStates } from './core/handoff.js';
 const tracker = new RequestTracker();
 const journal = new Journal(browser.storage.local);
 let config;
+let managerPreferences;
+let preferencesQueue = Promise.resolve();
 let verified = {};
 let summary = { connected: false, note: '尚未连接', downloadSpeed: '0', uploadSpeed: '0' };
 let lastNotice = '';
@@ -18,9 +21,10 @@ const notify = async note => {
 };
 const handoff = new Handoff({ downloads: browser.downloads, journal, call: rpc, server, notify });
 const ready = (async () => {
-  const stored = await browser.storage.local.get(['config', 'verified']);
+  const stored = await browser.storage.local.get(['config', 'verified', 'managerPreferences']);
   config = normalizeConfig(stored.config || defaults());
   verified = stored.verified || {};
+  managerPreferences = readPreferences(stored.managerPreferences);
   await journal.load();
   await browser.alarms.create('bridge-status', { periodInMinutes: 1 });
   await browser.menus.removeAll();
@@ -96,6 +100,18 @@ async function addLinks(message, context) {
 async function handle(message) {
   await ready;
   switch (message?.type) {
+    case 'MANAGER_PREFERENCES_GET': return managerPreferences;
+    case 'MANAGER_PREFERENCES_PATCH': {
+      const patch = validatePreferencePatch(message.patch);
+      const work = preferencesQueue.then(async () => {
+        const next = { ...managerPreferences, ...patch };
+        await browser.storage.local.set({ managerPreferences: { version: 1, options: next } });
+        managerPreferences = next;
+        return next;
+      });
+      preferencesQueue = work.catch(() => {});
+      return work;
+    }
     case 'CONFIG_GET': return config;
     case 'CONFIG_PUBLIC': return { ...config, servers: config.servers.map(({ secret: _secret, ...s }) => s) };
     case 'SELECT_SERVER': await saveConfig({ ...config, defaultServerId: message.serverId, enabled: false }); return true;

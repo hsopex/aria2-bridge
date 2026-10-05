@@ -6,7 +6,7 @@ Aria2 Bridge 不向开发者、分析平台或云同步服务发送数据。请�
 
 | 权限 | 用途 |
 | --- | --- |
-| storage | 本地保存版本化配置、界面主题、RPC Secret、连接测试标记、GID 交接记录 |
+| storage | 本地保存版本化配置、界面主题、AriaNg 偏好、RPC Secret、连接测试标记、GID 交接记录 |
 | downloads | 观察下载、暂停、取消、恢复与核对历史状态；不删除历史记录 |
 | webRequest | 非阻断观察 GET／POST、来源、重定向和实际发送的请求头；不开启接管时不缓存请求 |
 | cookies | 对右键所点击的、非隐私顶层同源链接读取明确 Cookie 容器与分区；仅在该 RPC 开启 Cookie 转发时使用 |
@@ -21,7 +21,7 @@ Aria2 Bridge 不向开发者、分析平台或云同步服务发送数据。请�
 
 ## 数据处理
 
-- 界面主题仅保存在扩展本地存储，并使用 localStorage 缓存以减少启动时的闪烁；不发送到 RPC 服务。
+- 界面主题与 AriaNg 偏好仅保存在扩展本地存储，AriaNg 原生服务使用 localStorage 保存相应偏好，主题还使用 localStorage 缓存以减少启动时的闪烁；不发送到 RPC 服务。
 
 - Secret 随 JSON-RPC POST 的 token 参数发送到选定 RPC；不放在 URL、日志和默认导出文件中。配置地址禁止内嵌用户名密码、查询参数和 URL 片段。RPC 请求省略 Firefox 自身的 RPC 站点 Cookie，禁止自动重定向 RPC 请求。
 - RPC 接收任务 URL、文件名和远程目录，以及用户在 AriaNg 中提交的任务参数。任务 URL 本身可能含下载令牌。
