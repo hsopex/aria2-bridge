@@ -148,6 +148,6 @@ article button { margin-right: 10px; margin-bottom: 6px; }
 }
 
 .preference-grid { margin: 18px 0 26px; }
-#manager-preference-status { font-size: 12px; overflow-wrap: anywhere; }
-#manager-preference-status[data-kind="success"] { color: var(--success); }
-#manager-preference-status[data-kind="error"] { color: var(--danger); }
+#manager-preference-status, #shortcut-status { font-size: 12px; overflow-wrap: anywhere; }
+#manager-preference-status[data-kind="success"], #shortcut-status[data-kind="success"] { color: var(--success); }
+#manager-preference-status[data-kind="error"], #shortcut-status[data-kind="error"] { color: var(--danger); }

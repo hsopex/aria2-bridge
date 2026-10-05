@@ -5,7 +5,7 @@
   <aside class="settings-sidebar">
     <a class="brand" href="#appearance"><img src="../icon.svg" width="32" height="32" alt=""><span>Aria2 Bridge<small>Firefox 下载助手</small></span></a>
     <nav aria-label="设置导航">
-      <a href="#appearance">外观</a><a href="#manager-preferences">AriaNg 偏好</a><a href="#rpc">RPC 服务</a><a href="#takeover">下载接管</a><a href="#filters">过滤规则</a><a href="#data">配置备份</a><a href="#history">交接记录</a>
+      <a href="#appearance">外观</a><a href="#shortcuts">快捷操作</a><a href="#manager-preferences">AriaNg 偏好</a><a href="#rpc">RPC 服务</a><a href="#takeover">下载接管</a><a href="#filters">过滤规则</a><a href="#data">配置备份</a><a href="#history">交接记录</a>
     </nav>
     <p class="sidebar-note">文件保存到 aria2 所在机器，而非当前浏览器的下载目录。</p>
   </aside>
@@ -14,6 +14,16 @@
     <section id="appearance" class="settings-section">
       <div class="section-heading"><div><h2>外观</h2><p>选择适合你的界面主题，修改后立即生效。</p></div><span class="section-tag">自动保存</span></div>
       <div class="appearance-row"><label class="field" for="theme"><span>界面主题</span><select id="theme"><option value="system">跟随系统</option><option value="light">浅色模式</option><option value="dark">深色模式</option></select></label><p class="field-hint">主题应用于设置页、工具栏弹出页以及 AriaNg 标签页与侧栏。跟随系统时，界面会随系统外观切换。</p></div>
+    </section>
+    <section id="shortcuts" class="settings-section">
+      <div class="section-heading"><div><h2>快捷操作</h2><p>右键工具栏图标可使用常用功能；也可设置 Firefox 全局快捷键。</p></div></div>
+      <form id="shortcut-settings">
+        <label class="switch-row"><span><strong>启用功能快捷键</strong><small>关闭后释放按键，保留配置；右键菜单仍可使用。</small></span><input id="shortcuts-enabled" type="checkbox" role="switch" disabled></label>
+        <div id="shortcut-fields" class="server-grid preference-grid"></div>
+        <div class="section-actions"><button id="save-shortcuts" type="submit" disabled>保存快捷键</button><button id="suggest-shortcuts" type="button" class="secondary" disabled>填入建议按键</button></div>
+      </form>
+      <p id="shortcut-status" role="status" aria-live="polite"></p>
+      <p class="field-hint">聚焦输入框后按下组合键，也可手动输入，例如 Alt+Shift+M。按退格键或删除键清空，留空表示不绑定。与 Firefox、系统或其他扩展冲突的按键可能无法触发，请改用其他组合。这里的总开关仅控制功能快捷键；管理页内部快捷键在“AriaNg 偏好”中设置。</p>
     </section>
     <section id="manager-preferences" class="settings-section">
       <div class="section-heading"><div><h2>AriaNg 偏好</h2><p>统一管理标签页与侧栏的原生偏好，修改后自动保存。</p></div><span class="section-tag">自动保存</span></div>

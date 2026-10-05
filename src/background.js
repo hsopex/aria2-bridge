@@ -1,3 +1,4 @@
+import { ShortcutSettings, shortcutActions } from './core/shortcuts.js';
 import { toolbarState } from './core/toolbar.js';
 import { readPreferences, validatePreferencePatch } from './core/manager-preferences.js';
 import { defaults, normalizeConfig, serverSignature, exportConfig, validateLink } from './core/config.js';
@@ -9,6 +10,9 @@ import { Journal, Handoff, activeStates } from './core/handoff.js';
 const tracker = new RequestTracker();
 const journal = new Journal(browser.storage.local);
 let config;
+let shortcuts;
+let menuServerIds = [];
+let menuQueue = Promise.resolve();
 let managerPreferences;
 let preferencesQueue = Promise.resolve();
 let verified = {};
@@ -32,11 +36,61 @@ const ready = (async () => {
   config = normalizeConfig(stored.config || defaults());
   verified = stored.verified || {};
   managerPreferences = readPreferences(stored.managerPreferences);
+  const { os } = await browser.runtime.getPlatformInfo();
+  shortcuts = new ShortcutSettings(browser.commands, browser.storage.local, os);
+  await shortcuts.load();
   await journal.load();
   await browser.alarms.create('bridge-status', { periodInMinutes: 1 });
   await browser.menus.removeAll();
   browser.menus.create({ id: 'send-link', title: '发送到 Aria2 Bridge', contexts: ['link'] });
+  browser.menus.create({ id: 'quick-actions', title: 'Aria2 Bridge 快捷操作', contexts: ['action'] });
+  for (const action of shortcutActions) browser.menus.create({ id: action.name, parentId: 'quick-actions', title: action.label, contexts: ['action'], ...(action.name === 'open-add' ? { command: '_execute_action' } : {}), ...(action.name === 'toggle-takeover' ? { type: 'checkbox', checked: config.enabled } : {}) });
+  browser.menus.create({ id: 'toggle-shortcuts', parentId: 'quick-actions', title: '启用功能快捷键', type: 'checkbox', checked: shortcuts.state.enabled, contexts: ['action'] });
+  browser.menus.create({ id: 'quick-rpc', parentId: 'quick-actions', title: '切换默认 RPC', contexts: ['action'] });
+  await syncMenus(true);
 })();
+
+function syncMenus(rebuild = false) {
+  const work = menuQueue.then(async () => {
+    await browser.menus.update('toggle-takeover', { checked: config.enabled });
+    await browser.menus.update('toggle-shortcuts', { checked: shortcuts.state.enabled });
+    if (rebuild) {
+      for (const id of menuServerIds) await browser.menus.remove(id);
+      menuServerIds = config.servers.map(s => ({ server: s, menuId: `quick-rpc-${s.id}` }));
+      for (const item of menuServerIds) browser.menus.create({ id: item.menuId, parentId: 'quick-rpc', title: item.server.name, type: 'radio', checked: item.server.id === config.defaultServerId, contexts: ['action'] });
+      menuServerIds = menuServerIds.map(item => item.menuId);
+    }
+  });
+  menuQueue = work.catch(() => {});
+  return work;
+}
+function runQuickAction(name) {
+  // These APIs need the original trusted menu/keyboard gesture.
+  if (name === 'open-add') return browser.action.openPopup();
+  if (name === 'toggle-sidebar') return browser.sidebarAction.toggle();
+  return ready.then(async () => {
+    switch (name) {
+      case 'open-manager': return openManager();
+      case 'open-options': return browser.runtime.openOptionsPage();
+      case 'toggle-takeover':
+        try { return await saveConfig(current => ({ ...current, enabled: !current.enabled })); }
+        finally { await syncMenus(); }
+      case 'test-connection': {
+        const version = await handle({ type: 'TEST', serverId: config.defaultServerId });
+        return notify(`连接成功 · aria2 ${version.version}`);
+      }
+      case 'refresh-status': {
+        const status = await refresh();
+        return notify(status.note);
+      }
+      default: throw new Error('未知快捷功能');
+    }
+  });
+}
+browser.commands.onCommand.addListener(name => {
+  if (!shortcuts?.enabled || !shortcutActions.some(a => a.name === name)) return;
+  runQuickAction(name).catch(error => notify(error.message));
+});
 
 function badge() {
   const work = badgeQueue.then(async () => {
@@ -86,7 +140,7 @@ async function refresh() {
 let configQueue = Promise.resolve();
 function saveConfig(input) {
   const work = configQueue.then(async () => {
-    const next = normalizeConfig(input);
+    const next = normalizeConfig(typeof input === 'function' ? input(config) : input);
     if (handoff.locks.size && config.servers.some(old => {
       const changed = next.servers.find(s => s.id === old.id);
       return !changed || serverSignature(old) !== serverSignature(changed);
@@ -103,6 +157,7 @@ function saveConfig(input) {
     if (changedServer) { statsGeneration++; summary = disconnectedSummary('正在连接'); }
     if (!config.enabled) tracker.records.clear();
     await badge();
+    await syncMenus(true);
     if (changedServer) refresh().catch(report);
     return config;
   });
@@ -140,6 +195,12 @@ async function addLinks(message, context) {
 async function handle(message) {
   await ready;
   switch (message?.type) {
+    case 'SHORTCUTS_GET': return shortcuts.state;
+    case 'SHORTCUTS_SAVE': {
+      const saved = await shortcuts.save(message.shortcuts);
+      await syncMenus();
+      return saved;
+    }
     case 'MANAGER_PREFERENCES_GET': return managerPreferences;
     case 'MANAGER_PREFERENCES_PATCH': {
       const patch = validatePreferencePatch(message.patch);
@@ -152,8 +213,8 @@ async function handle(message) {
       preferencesQueue = work.catch(() => {});
       return work;
     }
-    case 'CONFIG_GET': return config;
-    case 'CONFIG_PUBLIC': return { ...config, servers: config.servers.map(({ secret: _secret, ...s }) => s) };
+    case 'CONFIG_GET': await configQueue; return config;
+    case 'CONFIG_PUBLIC': await configQueue; return { ...config, servers: config.servers.map(({ secret: _secret, ...s }) => s) };
     case 'SELECT_SERVER': await saveConfig({ ...config, defaultServerId: message.serverId, enabled: false }); return true;
     case 'SET_ENABLED': await saveConfig({ ...config, enabled: message.enabled }); return config.enabled;
     case 'CONFIG_SAVE': return saveConfig(message.config);
@@ -240,6 +301,16 @@ browser.alarms.onAlarm.addListener(alarm => {
   if (alarm.name === 'bridge-status') ready.then(async () => { tracker.prune(); await handoff.recover(); await refresh(); }).catch(report);
 });
 browser.menus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === 'toggle-shortcuts') {
+    shortcuts.save(current => ({ ...current, enabled: !current.enabled })).finally(() => syncMenus()).catch(error => notify(error.message));
+    return;
+  }
+  if (shortcutActions.some(a => a.name === info.menuItemId)) { runQuickAction(info.menuItemId).catch(error => notify(error.message)); return; }
+  if (String(info.menuItemId).startsWith('quick-rpc-')) {
+    const selected = config.servers.find(s => s.id === String(info.menuItemId).slice('quick-rpc-'.length));
+    if (selected) ready.then(() => saveConfig({ ...config, defaultServerId: selected.id, enabled: false })).catch(error => { syncMenus(true).catch(report); notify(error.message); });
+    return;
+  }
   if (info.menuItemId !== 'send-link') return;
   ready.then(async () => {
     const s = server();

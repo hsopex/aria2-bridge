@@ -1,8 +1,10 @@
+import { shortcutActions, normalizeShortcut } from '../core/shortcuts.js';
 import { preferenceGroups } from '../core/manager-preferences.js';
 import { $, send, showHandoffs } from './common.js';
 import { setTheme } from './theme.js';
 let config;
 let dirty = false;
+let shortcutsDirty = false;
 let busy = false;
 const editors = new Map();
 function status(message, kind = 'success') {
@@ -162,7 +164,7 @@ function navigation() {
   }
 }
 window.addEventListener('hashchange', navigation); navigation();
-window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
+window.addEventListener('beforeunload', event => { if (dirty || shortcutsDirty) { event.preventDefault(); event.returnValue = ''; } });
 send('CONFIG_GET').then(async data => {
   config = data; render(); setDirty(false); $('#export').disabled = false; $('#import').disabled = false; await handoffs();
 }).catch(e => status(e.message, 'error'));
@@ -223,3 +225,77 @@ async function initializeManagerPreferences() {
   });
 }
 initializeManagerPreferences().catch(e => { $('#manager-preference-status').textContent = e.message; });
+
+async function initializeShortcuts() {
+  const [{ os }, state] = await Promise.all([browser.runtime.getPlatformInfo(), send('SHORTCUTS_GET')]);
+  const inputs = new Map();
+  let saved = state;
+  let saving = false;
+  function shortcutStatus(message, kind = 'success') {
+    shortcutsDirty = [...inputs].some(([name, input]) => input.value !== saved.bindings[name]);
+    $('#shortcut-status').textContent = message; $('#shortcut-status').dataset.kind = kind;
+  }
+  function populate(value) {
+    $('#shortcuts-enabled').checked = value.enabled;
+    for (const [name, input] of inputs) input.value = value.bindings[name];
+    shortcutsDirty = false;
+  }
+  function lock(value) {
+    saving = value;
+    for (const input of document.querySelectorAll('#shortcut-settings input, #shortcut-settings button')) input.disabled = value;
+  }
+  for (const action of shortcutActions) {
+    const label = document.createElement('label'); label.className = 'field';
+    const span = document.createElement('span'); span.textContent = action.label;
+    const input = document.createElement('input'); input.type = 'text'; input.id = `shortcut-${action.name}`; input.maxLength = 80; input.autocomplete = 'off'; input.spellcheck = false; input.placeholder = '未绑定 · 按组合键或输入';
+    input.addEventListener('keydown', event => {
+      if (['Tab', 'Enter', 'Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) return;
+      if (event.key === 'Escape') { event.preventDefault(); input.value = saved.bindings[action.name]; shortcutStatus('已恢复此快捷键'); input.blur(); return; }
+      if (['Backspace', 'Delete'].includes(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) { event.preventDefault(); input.value = ''; shortcutStatus('有未保存的快捷键更改'); return; }
+      if (!event.ctrlKey && !event.altKey && !event.metaKey && !/^F\d+$/.test(event.key)) return;
+      event.preventDefault();
+      const names = { ',': 'Comma', '.': 'Period', ' ': 'Space', ArrowUp: 'Up', ArrowDown: 'Down', ArrowLeft: 'Left', ArrowRight: 'Right' };
+      const key = names[event.key] || (event.key.length === 1 ? event.key.toUpperCase() : event.key);
+      const parts = [event.ctrlKey ? (os === 'mac' ? 'MacCtrl' : 'Ctrl') : '', event.altKey ? 'Alt' : '', event.metaKey ? 'Command' : '', event.shiftKey ? 'Shift' : '', key].filter(Boolean);
+      try { input.value = normalizeShortcut(parts.join('+'), os); shortcutStatus('有未保存的快捷键更改'); }
+      catch (error) { shortcutStatus(error.message, 'error'); }
+    });
+    input.addEventListener('input', () => shortcutStatus('有未保存的快捷键更改'));
+    inputs.set(action.name, input); label.append(span, input); $('#shortcut-fields').append(label);
+  }
+  populate(state); lock(false);
+  browser.storage.onChanged.addListener((changes, area) => {
+    const next = changes.shortcuts?.newValue;
+    if (area !== 'local' || !next) return;
+    const previous = saved; saved = next;
+    $('#shortcuts-enabled').checked = next.enabled;
+    for (const [name, input] of inputs) if (input.value === previous.bindings[name]) input.value = next.bindings[name];
+    if (!saving) shortcutStatus(next.enabled ? '快捷键已启用' : '快捷键已停用，绑定已保留');
+  });
+  $('#shortcut-settings').addEventListener('submit', async event => {
+    event.preventDefault(); if (saving) return;
+    const next = { version: 1, enabled: $('#shortcuts-enabled').checked, bindings: Object.fromEntries([...inputs].map(([name, input]) => [name, input.value])) };
+    lock(true);
+    try { saved = await send('SHORTCUTS_SAVE', { shortcuts: next }); populate(saved); shortcutStatus(saved.enabled ? '快捷键已保存并启用' : '快捷键已保存并停用，按键已释放'); }
+    catch (error) { shortcutStatus(error.message, 'error'); }
+    finally { lock(false); }
+  });
+  // Apply only the master switch immediately; editable bindings use their own save.
+  $('#shortcuts-enabled').addEventListener('change', async () => {
+    const enabled = $('#shortcuts-enabled').checked; lock(true);
+    try { saved = await send('SHORTCUTS_SAVE', { shortcuts: { ...saved, enabled } }); shortcutStatus(enabled ? '快捷键已启用，编辑的按键需保存后生效' : '快捷键已停用，绑定已保留'); }
+    catch (error) { $('#shortcuts-enabled').checked = saved.enabled; shortcutStatus(error.message, 'error'); }
+    finally { lock(false); }
+  });
+  $('#suggest-shortcuts').addEventListener('click', () => {
+    for (const action of shortcutActions) inputs.get(action.name).value = action.suggested;
+    shortcutStatus('已填入建议按键，保存后生效');
+  });
+}
+initializeShortcuts().catch(e => { $('#shortcut-status').textContent = e.message; });
+
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.config?.newValue && config && !dirty && !busy) {
+    config = changes.config.newValue; render(); setDirty(false);
+  }
+});
