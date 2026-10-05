@@ -1,7 +1,13 @@
+import { downloadCounts } from '../core/toolbar.js';
 import { $, send, speed, serverOptions, textStatus } from './common.js';
 let config;
+function updateTaskCount(s) {
+  const counts = downloadCounts(s);
+  $('#tasks').textContent = counts ? `未完成 ${Math.min(counts.total, 99)}${counts.total > 99 ? '（已达显示上限）' : ''} · 下载中 ${counts.active} · 等待／暂停 ${counts.waiting}` : '任务数量未知';
+}
 async function update() {
   const s = await send('STATUS', { refresh: true });
+  updateTaskCount(s);
   textStatus(`${s.note} · ↓ ${speed(s.downloadSpeed)} · ↑ ${speed(s.uploadSpeed)}`);
 }
 async function init() {
@@ -34,6 +40,7 @@ $('#links').addEventListener('submit', async event => {
     const result = await send('ADD', { serverId: $('#server').value, links: $('#urls').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean) });
     textStatus(result.map(r => `${r.state === 'added' ? '已添加' : r.state === 'rejected' ? '被拒绝' : '结果待确认，请勿重复发送'} · ${r.gid}`).join('\n'));
     $('#urls').value = '';
+    send('STATUS', { refresh: true }).then(updateTaskCount).catch(() => {});
   } catch (error) { textStatus(error.message); }
   finally { $('#add').disabled = false; }
 });

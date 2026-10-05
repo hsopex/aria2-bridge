@@ -120,9 +120,35 @@ try {
   await message('CONFIG_SAVE', { config });
   await until(() => message('TEST', { serverId: 'local' }).catch(() => null), v => Boolean(v?.version), 'real aria2 connection');
   console.log(`Firefox ${created.capabilities.browserVersion}: installed; real aria2 RPC connected`);
+  const toolbar = () => request(route('/execute/async'), { script: 'const done=arguments[arguments.length-1]; Promise.all([browser.action.getBadgeText({}),browser.action.getTitle({})]).then(([badge,title])=>done({badge,title}));', args: [] });
+  const toolbarIcon = async expected => {
+    await request(route('/moz/context'), { context: 'chrome' });
+    await execute('const w=Services.wm.getMostRecentWindow("navigator:browser"); let ui=w.CustomizableUI; if(!ui) { for(const path of ["resource:///modules/CustomizableUI.sys.mjs","resource:///modules/customizableui/CustomizableUI.sys.mjs"]) { try { ui=ChromeUtils.importESModule(path).CustomizableUI; break; } catch {} } } if(!ui)throw new Error("CustomizableUI unavailable"); const id=arguments[0].toLowerCase().replace(/[^a-z0-9_-]/g,"_")+"-browser-action"; ui.addWidgetToArea(id,ui.AREA_NAVBAR);', [addon]);
+    const style = await until(() => execute('const id=arguments[0].toLowerCase().replace(/[^a-z0-9_-]/g,"_")+"-browser-action"; const w=Services.wm.getMostRecentWindow("navigator:browser"); const button=w.document.getElementById(id); const icon=button?.querySelector(".toolbarbutton-icon"); return icon ? w.getComputedStyle(icon).listStyleImage : "";', [addon]), value => value.includes(expected), 'toolbar icon painted');
+    await request(route('/moz/context'), { context: 'content' });
+    return style;
+  };
+  assert.equal((await toolbar()).badge, '');
+  assert.match((await toolbar()).title, /自动接管已关闭/);
+  assert.match(await toolbarIcon('icon-disabled.svg'), /icon-disabled\.svg/, 'gray toolbar icon while disabled');
+  const queued = await message('RPC', { method: 'system.multicall', params: [Array.from({length:105}, (_,i)=>({methodName:'aria2.addUri',params:[[`${site}/badge-${i}.zip`],{pause:'true'}]}))] });
+  await message('STATUS', { refresh: true });
+  assert.equal((await toolbar()).badge, '99'); assert.match((await toolbar()).title, /未完成 105/);
+  await message('TEST', { serverId: 'local' });
+  await message('SET_ENABLED', { enabled: true });
+  assert.match((await toolbar()).title, /自动接管已开启/); assert.equal((await toolbar()).badge, '99');
+  assert.match(await toolbarIcon('icon-enabled.svg'), /icon-enabled\.svg/, 'green toolbar icon while enabled');
+  await message('SET_ENABLED', { enabled: false });
+  assert.match((await toolbar()).title, /自动接管已关闭/); assert.equal((await toolbar()).badge, '99');
+  assert.match(await toolbarIcon('icon-disabled.svg'), /icon-disabled\.svg/, 'gray toolbar icon restores without clearing tasks');
+  await message('RPC', { method: 'system.multicall', params: [queued.map(([gid])=>({methodName:'aria2.forceRemove',params:[gid]}))] });
+  await message('STATUS', { refresh: true }); assert.equal((await toolbar()).badge, '');
+
   const bad = { ...config, servers: [{ ...config.servers[0], secret: 'wrong' }] };
   await message('CONFIG_SAVE', { config: bad });
   await assert.rejects(message('TEST', { serverId: 'local' }));
+  const failedStatus = await message('STATUS', { refresh: true });
+  assert.equal(failedStatus.connected, false); assert.equal((await toolbar()).badge, '');
   await assert.rejects(message('SET_ENABLED', { enabled: true }));
   await message('CONFIG_SAVE', { config }); await message('TEST', { serverId: 'local' });
   const exported = await message('CONFIG_EXPORT'); assert.equal(exported.servers[0].secret, '');
@@ -182,6 +208,7 @@ try {
   await message('SELECT_SERVER', { serverId: 'second' });
   assert.equal((await message('CONFIG_PUBLIC')).enabled, false);
   await message('TEST', { serverId: 'second' });
+  assert.equal((await toolbar()).badge, '', 'new RPC does not retain old counts');
   const manual = await message('ADD', { links: [`${site}/manual.zip?one=1`, `${site}/manual.zip?two=2`, 'magnet:?xt=urn:btih:0123456789012345678901234567890123456789'] });
   assert.ok(manual.every(r => r.state === 'added'));
   for (const r of manual) {
@@ -189,6 +216,7 @@ try {
     assert.equal(options.dir, `${temp}/secondary-profile-dir`);
     assert.ok(!String(options.header).includes('account='));
   }
+  await message('STATUS', { refresh: true }); assert.equal((await toolbar()).badge, '3', 'selected RPC task count');
   await message('RPC', { method: 'system.multicall', params: [manual.map(r => ({ methodName: 'aria2.forcePause', params: [r.gid] }))] });
   await message('RPC', { method: 'system.multicall', params: [manual.map(r => ({ methodName: 'aria2.forceRemove', params: [r.gid] }))] });
   await message('SELECT_SERVER', { serverId: 'local' });
@@ -246,6 +274,7 @@ try {
     assert.ok(received.some(r => r.cookie === `account=account${i}`));
   }
   assert.ok(received.every(r => !r.cookie.includes('account0') || !r.cookie.includes('account1')));
+  console.log(`Firefox ${created.capabilities.browserVersion}: toolbar takeover state, 105 tasks capped at 99, zero/offline clearing and RPC switching passed`);
   console.log(`Firefox ${created.capabilities.browserVersion}: CSP AriaNg, sidebar, bad Secret, multiple RPC services, remote directories, batch/magnet, container isolation, redirects, unknown size and partitioned cookies passed (${ariaRequests.length} default-agent requests)`);
 } finally {
   if (session) await request(`/session/${session}`, undefined, 'DELETE').catch(() => {});

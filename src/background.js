@@ -1,3 +1,4 @@
+import { toolbarState } from './core/toolbar.js';
 import { readPreferences, validatePreferencePatch } from './core/manager-preferences.js';
 import { defaults, normalizeConfig, serverSignature, exportConfig, validateLink } from './core/config.js';
 import { rpc, makeGid } from './core/rpc.js';
@@ -11,7 +12,13 @@ let config;
 let managerPreferences;
 let preferencesQueue = Promise.resolve();
 let verified = {};
-let summary = { connected: false, note: '尚未连接', downloadSpeed: '0', uploadSpeed: '0' };
+const disconnectedSummary = note => ({ connected: false, note, downloadSpeed: '0', uploadSpeed: '0' });
+let summary = disconnectedSummary('尚未连接');
+let statsRevision = 0;
+let statsGeneration = 0;
+let appliedStatsRevision = 0;
+let badgeQueue = Promise.resolve();
+let currentIcon;
 let lastNotice = '';
 const server = id => config.servers.find(s => s.id === (id || config.defaultServerId));
 const notify = async note => {
@@ -31,19 +38,48 @@ const ready = (async () => {
   browser.menus.create({ id: 'send-link', title: '发送到 Aria2 Bridge', contexts: ['link'] });
 })();
 
-async function badge() {
-  const pending = Object.values(journal.records).filter(r => activeStates.has(r.state) && r.state !== 'abandoned').length;
-  await browser.action.setBadgeText({ text: pending ? '?' : config.enabled ? 'ON' : '' });
-  await browser.action.setBadgeBackgroundColor({ color: pending ? '#b35c00' : summary.connected ? '#237747' : '#8a3440' });
-  await browser.action.setTitle({ title: pending ? `Aria2 Bridge · ${pending} 个交接待确认` : `Aria2 Bridge · ${summary.note}` });
+function badge() {
+  const work = badgeQueue.then(async () => {
+    const pending = Object.values(journal.records).filter(r => activeStates.has(r.state) && r.state !== 'abandoned').length;
+    const state = toolbarState({ enabled: config.enabled, summary, pending, serverName: server().name });
+    if (currentIcon !== state.icon) {
+      await browser.action.setIcon({ path: state.icon });
+      currentIcon = state.icon;
+    }
+    await browser.action.setBadgeText({ text: state.text });
+    await browser.action.setBadgeBackgroundColor({ color: state.color });
+    await browser.action.setBadgeTextColor({ color: '#ffffff' });
+    await browser.action.setTitle({ title: state.title });
+  });
+  badgeQueue = work.catch(() => {});
+  return work;
 }
 
-async function refresh() {
+async function queryGlobalStats(s, params = []) {
+  const selected = server();
+  const current = s.id === selected.id && serverSignature(s) === serverSignature(selected);
+  const generation = statsGeneration;
+  const revision = current ? ++statsRevision : null;
+  const stillCurrent = () => current && generation === statsGeneration && revision >= appliedStatsRevision && s.id === config.defaultServerId && serverSignature(s) === serverSignature(server());
   try {
-    const result = await rpc(server(), 'aria2.getGlobalStat');
-    summary = { ...result, connected: true, note: '已连接', checkedAt: Date.now() };
-  } catch { summary = { connected: false, note: '连接失败，请检查地址、Secret 和网络', downloadSpeed: '0', uploadSpeed: '0', checkedAt: Date.now() }; }
-  await badge();
+    const result = await rpc(s, 'aria2.getGlobalStat', params);
+    if (stillCurrent()) {
+      appliedStatsRevision = revision;
+      summary = { ...result, connected: true, note: '已连接', checkedAt: Date.now() };
+      await badge();
+    }
+    return result;
+  } catch (error) {
+    if (stillCurrent()) {
+      appliedStatsRevision = revision;
+      summary = disconnectedSummary('连接失败，请检查地址、Secret 和网络');
+      await badge();
+    }
+    throw error;
+  }
+}
+async function refresh() {
+  try { await queryGlobalStats(server()); } catch { /* The query clears stale counts on failure. */ }
   return summary;
 }
 
@@ -61,10 +97,13 @@ function saveConfig(input) {
     }
     const selected = next.servers.find(s => s.id === next.defaultServerId);
     if (next.enabled && verified[selected.id] !== serverSignature(selected)) throw new Error('请先成功测试默认 RPC，再开启自动接管');
+    const changedServer = config.defaultServerId !== next.defaultServerId || serverSignature(server()) !== serverSignature(selected);
     await browser.storage.local.set({ config: next });
     config = next;
+    if (changedServer) { statsGeneration++; summary = disconnectedSummary('正在连接'); }
     if (!config.enabled) tracker.records.clear();
     await badge();
+    if (changedServer) refresh().catch(report);
     return config;
   });
   configQueue = work.catch(() => {});
@@ -94,6 +133,7 @@ async function addLinks(message, context) {
       result.push({ gid, state: added === gid ? 'added' : 'uncertain' });
     } catch (e) { result.push({ gid, state: e.kind === 'rejected' ? 'rejected' : 'uncertain' }); }
   }
+  if (s.id === config.defaultServerId) refresh().catch(report);
   return result;
 }
 
@@ -138,7 +178,10 @@ async function handle(message) {
         const at = message.method === 'aria2.addTorrent' ? 2 : 1;
         if (s.dir) params[at] = { dir: s.dir, ...(params[at] || {}) };
       }
-      return rpc(s, message.method, params);
+      if (message.method === 'aria2.getGlobalStat') return queryGlobalStats(s, params);
+      const result = await rpc(s, message.method, params);
+      if (s.id === config.defaultServerId && (/^aria2\.(add|pause|forcePause|unpause|remove|forceRemove)/.test(message.method) || message.method === 'system.multicall')) refresh().catch(report);
+      return result;
     }
     case 'HANDOFFS': return Object.values(journal.records).sort((a, b) => b.createdAt - a.createdAt);
     case 'RECHECK': await handoff.reconcile(message.downloadId); await badge(); return journal.records[message.downloadId];
@@ -184,7 +227,7 @@ async function considerReady(item) {
   const context = tracker.match(item);
   if (!context) return;
   await handoff.start(item, s, context);
-  await badge();
+  await refresh();
 }
 const report = () => notify('后台操作失败，请打开交接记录核对；浏览器下载未被主动删除').catch(() => {});
 browser.downloads.onCreated.addListener(item => { consider(item).catch(report); });

@@ -8,7 +8,7 @@
   "icons": { "48": "icon.svg", "96": "icon.svg" },
   "background": { "scripts": ["background.js"] },
   "action": {
-    "default_icon": "icon.svg",
+    "default_icon": "icon-disabled.svg",
     "default_title": "Aria2 Bridge",
     "default_popup": "popup/index.html"
   },
