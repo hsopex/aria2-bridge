@@ -1,7 +1,7 @@
 import { makeGid } from './rpc.js';
 import { requestOptions } from './requests.js';
 
-export const activeStates = new Set(['preparing', 'submitting', 'pending', 'accepted', 'cancelling', 'cancelled', 'conflict', 'abandoned']);
+export const activeStates = new Set(['awaiting', 'preparing', 'submitting', 'pending', 'accepted', 'cancelling', 'cancelled', 'conflict', 'abandoned']);
 
 export class Journal {
   constructor(storage) { this.storage = storage; this.records = {}; this.queue = Promise.resolve(); }
@@ -38,13 +38,25 @@ export class Handoff {
     if (['pending', 'conflict', 'retry'].includes(state)) await this.notify(note || '交接待确认');
     return next;
   }
-  start(item, server, context) {
+  start(item, server, context, decide) {
     return this.locked(item.id, async () => {
       if (this.journal.records[item.id] || item.state !== 'in_progress' || item.paused || !(item.bytesReceived > 0)) return;
       let r = await this.journal.put({ downloadId: item.id, serverId: server.id, endpoint: server.url,
         gid: makeGid(), filename: item.filename.split(/[\\/]/).pop(), state: 'preparing', createdAt: Date.now(), updatedAt: Date.now() });
       try { await this.downloads.pause(item.id); } catch {
         return this.save(r, 'skipped', '暂停失败，保留浏览器下载');
+      }
+      let overrides = {};
+      if (decide) {
+        const paused = await this.item(item.id);
+        if (!paused?.paused) return this.resume(r, '浏览器暂停状态未确认，未提交 aria2');
+        try {
+          r = await this.save(r, 'awaiting', '等待选择下载方式，尚未发送 aria2');
+          const choice = await decide(item, server);
+          if (!choice) return this.resume(r, '已选择浏览器下载，未提交 aria2');
+          server = choice.server; overrides = choice.options;
+          r = { ...r, serverId: server.id, endpoint: server.url, filename: overrides.out || r.filename, startPaused: choice.paused };
+        } catch { return this.resume(r, '询问失败，已恢复浏览器下载'); }
       }
       // Persist submitting before the first and only addUri. No credentials or cookies enter the journal.
       try { r = await this.save(r, 'submitting'); } catch {
@@ -57,7 +69,7 @@ export class Handoff {
         return this.resume(r, '浏览器暂停状态未确认，未提交 aria2');
       }
       try {
-        const options = { ...requestOptions(context, server, item.filename), gid: r.gid, pause: 'true' };
+        const options = { ...requestOptions(context, server, item.filename), ...overrides, gid: r.gid, pause: 'true' };
         const gid = await this.call(server, 'aria2.addUri', [[context.url], options]);
         if (gid !== r.gid) return this.save(r, 'pending', '返回 GID 不一致，交接待确认');
       } catch (error) {
@@ -119,8 +131,8 @@ export class Handoff {
     }
     try {
       const task = await this.call(server, 'aria2.tellStatus', [r.gid, ['gid', 'status']]);
-      if (task.status === 'paused') await this.call(server, 'aria2.unpause', [r.gid]);
-      else if (!['active', 'waiting', 'complete'].includes(task.status)) return this.save(r, 'retry', 'aria2 任务已停止，请从原页面重试');
+      if (task.status === 'paused' && !r.startPaused) await this.call(server, 'aria2.unpause', [r.gid]);
+      else if (!['active', 'waiting', 'complete', ...(r.startPaused ? ['paused'] : [])].includes(task.status)) return this.save(r, 'retry', 'aria2 任务已停止，请从原页面重试');
       return this.save(r, 'transferred', '已交给 aria2；浏览器历史记录保留');
     } catch { return this.save(r, 'cancelled', '浏览器已取消，aria2 启动状态待确认'); }
   }
@@ -128,9 +140,9 @@ export class Handoff {
     return this.locked(id, async () => {
       let r = this.journal.records[id];
       if (!r || !activeStates.has(r.state)) return r;
+      if (['preparing', 'awaiting'].includes(r.state)) return this.resume(r, '后台重启，未提交 aria2，已恢复浏览器下载');
       const server = this.server(r.serverId);
       if (!server || server.url !== r.endpoint) return this.save(r, 'pending', '原 RPC 配置不可用，交接待确认');
-      if (r.state === 'preparing') return this.resume(r, '后台重启，未提交 aria2，已恢复浏览器下载');
       if (r.state === 'conflict') {
         try { await this.stop(r, server); } catch { return this.save(r, 'conflict', 'aria2 停止状态仍待确认'); }
         return this.resume(r, '冲突已解除，已恢复浏览器下载');
@@ -162,6 +174,6 @@ export class Handoff {
     });
   }
   async recover() {
-    for (const r of Object.values(this.journal.records)) if (activeStates.has(r.state)) await this.reconcile(r.downloadId);
+    for (const r of Object.values(this.journal.records)) if (activeStates.has(r.state) && !this.locks.has(r.downloadId)) await this.reconcile(r.downloadId);
   }
 }

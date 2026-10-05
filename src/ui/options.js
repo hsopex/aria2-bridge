@@ -15,6 +15,8 @@ function setDirty(value) {
   dirty = value;
   $('#save-state').textContent = value ? '有未保存的更改' : '连接与规则已保存';
   $('#save-state').dataset.state = value ? 'dirty' : 'saved';
+  const page = document.body.dataset.page;
+  $('#save').hidden = !value && !['rpc', 'takeover', 'filters'].includes(page);
 }
 function field(label, value, type = 'text', hint = '') {
   const node = document.createElement('label'); node.className = 'field';
@@ -81,11 +83,12 @@ function render() {
     $('#servers').append(card); editors.set(server.id, { inputs, card, title, badge, feedback });
   }
   $('#enabled').checked = config.enabled;
+  $('#ask-before-download').checked = config.askBeforeDownload;
   for (const key of ['allowDomains', 'denyDomains', 'allowExtensions', 'denyExtensions']) $(`#${key}`).value = config.filters[key].join('\n');
   updateTitles(); setBusy(false);
 }
 function read() {
-  config = { ...config, enabled: $('#enabled').checked,
+  config = { ...config, enabled: $('#enabled').checked, askBeforeDownload: $('#ask-before-download').checked,
     servers: config.servers.map(s => { const e = editors.get(s.id).inputs; return { ...s, ...Object.fromEntries(Object.entries(e).map(([key, input]) => [key, input.type === 'checkbox' ? input.checked : input.value])) }; }),
     filters: Object.fromEntries(['allowDomains', 'denyDomains', 'allowExtensions', 'denyExtensions'].map(key => [key, $(`#${key}`).value.split(/[\n,]/).map(v => v.trim()).filter(Boolean)])),
   };
@@ -98,7 +101,9 @@ function setBusy(value) {
 }
 async function persist(testId) {
   if (busy || !config) return;
-  if (!$('#settings').reportValidity()) return;
+  for (const input of document.querySelectorAll('#settings input:invalid')) {
+    location.hash = input.closest('section').id; navigation(); input.reportValidity(); return;
+  }
   read(); setBusy(true);
   const feedback = testId ? editors.get(testId).feedback : null;
   if (feedback) { feedback.textContent = '正在保存并连接…'; delete feedback.dataset.kind; }
@@ -160,10 +165,22 @@ $('#refresh-handoffs').addEventListener('click', async () => {
   finally { $('#refresh-handoffs').disabled = false; }
 });
 function navigation() {
-  const current = location.hash || '#appearance';
+  const panels = [...document.querySelectorAll('.settings-section')];
+  const id = location.hash.slice(1) || 'appearance';
+  const selected = panels.find(panel => panel.id === id) || panels[0];
+  const changed = document.body.dataset.page !== selected.id;
+  document.body.dataset.page = selected.id;
+  $('#settings-navigation').value = selected.id;
+  for (const panel of panels) panel.hidden = panel !== selected;
   for (const link of document.querySelectorAll('.settings-sidebar nav a')) {
-    if (link.getAttribute('href') === current) link.setAttribute('aria-current', 'location'); else link.removeAttribute('aria-current');
+    if (link.getAttribute('href') === `#${selected.id}`) link.setAttribute('aria-current', 'location'); else link.removeAttribute('aria-current');
   }
+  // Read source labels from a stable page catalog so live localization stays reversible.
+  const descriptions = { appearance: ['外观', '选择适合你的界面主题，修改后立即生效。'], shortcuts: ['快捷操作', '常用动作与键盘快捷键'], 'manager-preferences': ['AriaNg 偏好', '管理标签页与侧栏的共享偏好'], rpc: ['RPC 服务', '连接与管理你的 aria2 服务'], takeover: ['下载接管', '选择自动发送或每次询问'], filters: ['过滤规则', '决定哪些下载由 aria2 接管'], data: ['配置备份', '备份与恢复服务配置'], history: ['交接记录', '核对每次下载的处理状态'] };
+  const [title, description] = descriptions[selected.id];
+  $('#page-title').textContent = title; $('#page-description').textContent = description;
+  $('#save').hidden = !['rpc', 'takeover', 'filters'].includes(selected.id) && !dirty;
+  if (changed) window.scrollTo(0, 0);
 }
 window.addEventListener('hashchange', navigation); navigation();
 window.addEventListener('beforeunload', event => { if (dirty || shortcutsDirty) { event.preventDefault(); event.returnValue = ''; } });
@@ -310,3 +327,5 @@ $('#manager-language').addEventListener('change', async () => {
   catch (error) { input.value = previous; status(error.message, 'error'); }
   finally { input.disabled = false; }
 });
+
+$('#settings-navigation').addEventListener('change', () => { location.hash = $('#settings-navigation').value; });

@@ -141,3 +141,35 @@ test('Firefox downloads without partial bytes are never paused prematurely', asy
   assert.equal(s.events.includes('aria2.addUri'), false);
   assert.equal(s.item.state, 'in_progress');
 });
+test('asking pauses and persists before showing UI, sends only after confirmation and respects the paused choice', async () => {
+  const s = setup(); let choose, opened;
+  const shown = new Promise(resolve => { opened = resolve; });
+  const work = s.h.start(s.item, s.server, {url:'https://a/file.zip',cookie:'session=secret'}, () => { opened(); return new Promise(resolve => {choose=resolve;}); });
+  await shown;
+  assert.equal(s.item.paused,true); assert.equal(s.journal.records[8].state,'awaiting'); assert.ok(!s.events.includes('aria2.addUri'));
+  assert.ok(!JSON.stringify(s.journal.records).includes('session=secret'));
+  await s.h.recover(); assert.equal(s.item.paused,true, 'routine recovery must not override an open prompt');
+  choose({server:{...s.server,dir:'/chosen'},options:{out:'新文件.zip'},paused:true}); await work;
+  const r=s.journal.records[8]; assert.equal(r.filename,'新文件.zip'); assert.equal(r.startPaused,true); assert.equal(r.state,'transferred');
+  assert.equal(s.tasks.get(r.gid).status,'paused'); assert.ok(!s.events.includes('aria2.unpause')); assert.equal(s.events.filter(e=>e==='aria2.addUri').length,1);
+});
+test('declining or failing confirmation resumes Firefox without any RPC submission', async () => {
+  for (const fail of [false,true]) {
+    const s=setup(); await s.h.start(s.item,s.server,{url:'https://a/file.zip'},async()=>{if(fail)throw Error('window');return null;});
+    assert.equal(s.item.paused,false); assert.equal(s.journal.records[8].state,'resumed'); assert.ok(!s.events.includes('aria2.addUri')); assert.ok(!s.events.includes('cancel'));
+  }
+});
+test('restart during an open confirmation restores the browser without querying or submitting a GID', async () => {
+  const s=setup(); let choose, opened; const shown=new Promise(resolve=>{opened=resolve;});
+  const work=s.h.start(s.item,s.server,{url:'https://a/file.zip'},()=>{opened();return new Promise(resolve=>{choose=resolve;});}); await shown;
+  const restored=new Journal(s.storage); await restored.load();
+  const next=new Handoff({downloads:s.h.downloads,journal:restored,call:s.h.call,server:()=>undefined}); await next.recover();
+  assert.equal(restored.records[8].state,'resumed'); assert.equal(s.item.paused,false); assert.ok(!s.events.some(e=>e.startsWith('aria2.')));
+  choose(null); await work;
+});
+test('lost confirmation response and restart preserve the requested paused task without resubmission', async()=>{
+  const s=setup({lost:true}); await s.h.start(s.item,s.server,{url:'https://a/file.zip'},async()=>({server:s.server,options:{out:'renamed.zip'},paused:true}));
+  assert.equal(s.journal.records[8].state,'pending');
+  const restored=new Journal(s.storage); await restored.load(); const h=new Handoff({downloads:s.h.downloads,journal:restored,call:s.h.call,server:()=>s.server}); await h.recover();
+  const r=restored.records[8]; assert.equal(r.state,'transferred'); assert.equal(s.tasks.get(r.gid).status,'paused'); assert.equal(s.events.filter(e=>e==='aria2.addUri').length,1); assert.ok(!s.events.includes('aria2.unpause'));
+});

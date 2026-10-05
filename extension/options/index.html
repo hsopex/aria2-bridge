@@ -5,18 +5,19 @@
   <aside class="settings-sidebar">
     <a class="brand" href="#appearance"><img src="../icon.svg" width="32" height="32" alt=""><span>Aria2 Bridge<small>Firefox 下载助手</small></span></a>
     <nav aria-label="设置导航">
-      <a href="#appearance">外观</a><a href="#shortcuts">快捷操作</a><a href="#manager-preferences">AriaNg 偏好</a><a href="#rpc">RPC 服务</a><a href="#takeover">下载接管</a><a href="#filters">过滤规则</a><a href="#data">配置备份</a><a href="#history">交接记录</a>
+      <a href="#appearance"><span aria-hidden="true">◐</span> 外观</a><a href="#shortcuts"><span aria-hidden="true">⌘</span> 快捷操作</a><a href="#manager-preferences"><span aria-hidden="true">▤</span> AriaNg 偏好</a><a href="#rpc"><span aria-hidden="true">⇄</span> RPC 服务</a><a href="#takeover"><span aria-hidden="true">↓</span> 下载接管</a><a href="#filters"><span aria-hidden="true">≡</span> 过滤规则</a><a href="#data"><span aria-hidden="true">↥</span> 配置备份</a><a href="#history"><span aria-hidden="true">◷</span> 交接记录</a>
     </nav>
+    <label class="mobile-navigation field"><span>设置菜单</span><select id="settings-navigation"><option value="appearance">外观</option><option value="shortcuts">快捷操作</option><option value="manager-preferences">AriaNg 偏好</option><option value="rpc">RPC 服务</option><option value="takeover">下载接管</option><option value="filters">过滤规则</option><option value="data">配置备份</option><option value="history">交接记录</option></select></label>
     <p class="sidebar-note">文件保存到 aria2 所在机器，而非当前浏览器的下载目录。</p>
   </aside>
   <main class="settings-content">
-    <header class="page-header"><div><p class="eyebrow">偏好设置</p><h1>让下载按你的方式运行</h1><p>管理连接、下载接管与界面外观。</p></div><button id="manager" type="button" class="secondary">打开 AriaNg <span aria-hidden="true">↗</span></button></header>
-    <section id="appearance" class="settings-section">
+    <header class="page-header"><div><p class="eyebrow">偏好设置</p><h1 id="page-title">外观</h1><p id="page-description">选择适合你的界面主题，修改后立即生效。</p></div><button id="manager" type="button" class="secondary">打开 AriaNg <span aria-hidden="true">↗</span></button></header>
+    <section hidden id="appearance" class="settings-section">
       <div class="section-heading"><div><h2>外观</h2><p>选择适合你的界面主题，修改后立即生效。</p></div><span class="section-tag">自动保存</span></div>
       <div class="appearance-row"><label class="field" for="manager-language"><span>界面语言</span><select id="manager-language" disabled><option value="zh_Hans">简体中文</option><option value="en">English</option></select></label><p class="field-hint">语言应用于插件页面、右键菜单、通知及 AriaNg 标签页和侧栏。</p></div>
       <div class="appearance-row"><label class="field" for="theme"><span>界面主题</span><select id="theme"><option value="system">跟随系统</option><option value="light">浅色模式</option><option value="dark">深色模式</option></select></label><p class="field-hint">主题应用于设置页、工具栏弹出页以及 AriaNg 标签页与侧栏。跟随系统时，界面会随系统外观切换。</p></div>
     </section>
-    <section id="shortcuts" class="settings-section">
+    <section hidden id="shortcuts" class="settings-section">
       <div class="section-heading"><div><h2>快捷操作</h2><p>右键工具栏图标可使用常用功能；也可设置 Firefox 全局快捷键。</p></div></div>
       <form id="shortcut-settings">
         <label class="switch-row"><span><strong>启用功能快捷键</strong><small>关闭后释放按键，保留配置；右键菜单仍可使用。</small></span><input id="shortcuts-enabled" type="checkbox" role="switch" disabled></label>
@@ -26,24 +27,25 @@
       <p id="shortcut-status" role="status" aria-live="polite"></p>
       <p class="field-hint">聚焦输入框后按下组合键，也可手动输入，例如 Alt+Shift+M。按退格键或删除键清空，留空表示不绑定。与 Firefox、系统或其他扩展冲突的按键可能无法触发，请改用其他组合。这里的总开关仅控制功能快捷键；管理页内部快捷键在“AriaNg 偏好”中设置。</p>
     </section>
-    <section id="manager-preferences" class="settings-section">
+    <section hidden id="manager-preferences" class="settings-section">
       <div class="section-heading"><div><h2>AriaNg 偏好</h2><p>统一管理标签页与侧栏的原生偏好，修改后自动保存。</p></div><span class="section-tag">自动保存</span></div>
       <div id="manager-preference-fields"><p class="empty-state">正在加载管理界面设置…</p></div>
       <p id="manager-preference-status" role="status" aria-live="polite"></p>
-      <p class="field-hint">主题使用上方“外观”。刷新间隔修改后，已打开的管理页会重新加载；其他偏好立即生效。任务通知仅在管理页打开时有效，声音是否播放由系统决定。RPC 地址、Secret、目录与服务选择由下方 RPC 配置管理。</p>
+      <p class="field-hint">主题和语言在“外观”中设置。刷新间隔修改后，已打开的管理页会重新加载；其他偏好立即生效。任务通知仅在管理页打开时有效，声音是否播放由系统决定。RPC 地址、Secret、目录与服务选择在“RPC 服务”中管理。</p>
     </section>
-    <form id="settings">
-      <section id="rpc" class="settings-section">
+    <form id="settings" novalidate>
+      <section hidden id="rpc" class="settings-section">
         <div class="section-heading"><div><h2>RPC 服务</h2><p>连接已有的 aria2，可添加多个服务并指定默认连接。</p></div><button id="new" type="button" class="secondary" disabled><span aria-hidden="true">＋</span> 添加服务</button></div>
         <div id="servers"><p class="empty-state">正在加载连接配置…</p></div>
         <div class="info-note">Secret 仅保存在当前 Firefox 配置中，不包含在导出文件里。开启 Cookie 转发后，登录凭证会发送给选定的 RPC 服务。</div>
       </section>
-      <section id="takeover" class="settings-section">
+      <section hidden id="takeover" class="settings-section">
         <div class="section-heading"><div><h2>下载接管</h2><p>将符合条件的浏览器下载交给默认 aria2 服务。</p></div></div>
         <label class="switch-row"><span><strong>自动接管下载</strong><small>请先成功测试默认 RPC，再启用此选项。</small></span><input id="enabled" type="checkbox" role="switch" disabled></label>
+        <label class="switch-row"><span><strong>每次下载前询问</strong><small>自动接管和右键发送时，先选择服务、目录、文件名及是否暂停。</small></span><input id="ask-before-download" type="checkbox" role="switch" disabled></label>
         <p class="field-hint">仅接管来源明确的 HTTP(S) GET 下载。隐私窗口、POST 和无法可靠确认登录态的任务继续由 Firefox 下载。</p>
       </section>
-      <section id="filters" class="settings-section">
+      <section hidden id="filters" class="settings-section">
         <div class="section-heading"><div><h2>过滤规则</h2><p>排除规则优先；允许列表为空时不限制。每行或逗号分隔。</p></div></div>
         <div class="filters">
           <label class="field"><span>允许域名</span><textarea id="allowDomains" rows="3" disabled placeholder="example.com&#10;*.example.org"></textarea><small class="field-hint">精确域名或 *.域名，仅匹配子域名。</small></label>
@@ -53,11 +55,11 @@
         </div>
       </section>
     </form>
-    <section id="data" class="settings-section">
+    <section hidden id="data" class="settings-section">
       <div class="section-heading"><div><h2>配置备份</h2><p>导出已保存的配置，或从 JSON 文件恢复。导入会替换现有服务与规则。</p></div></div>
       <div class="section-actions"><button id="export" type="button" class="secondary" disabled>导出配置</button><label class="file-button secondary">导入配置<input id="import" type="file" accept="application/json,.json" disabled></label></div><p class="field-hint">导出文件不包含 Secret，自动接管默认关闭。导入后请重新填写 Secret 并测试连接。</p>
     </section>
-    <section id="history" class="settings-section">
+    <section hidden id="history" class="settings-section">
       <div class="section-heading"><div><h2>交接记录</h2><p>核对下载去向，处理尚未确认的交接。</p></div><button id="refresh-handoffs" type="button" class="secondary">刷新记录</button></div>
       <p class="field-hint">待确认时不会重复提交。继续浏览器下载前会核对并停止 aria2 任务；原任务不能恢复时，请从原页面重试。</p><div id="handoffs"></div>
     </section>

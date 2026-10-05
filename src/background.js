@@ -1,3 +1,4 @@
+import { DownloadPrompts, downloadOptions } from './core/download-options.js';
 import { translateText } from './core/language.js';
 import { ShortcutSettings, shortcutActions } from './core/shortcuts.js';
 import { toolbarState } from './core/toolbar.js';
@@ -8,6 +9,8 @@ import { matchesFilters } from './core/rules.js';
 import { RequestTracker, requestOptions, selectCookies } from './core/requests.js';
 import { Journal, Handoff, activeStates } from './core/handoff.js';
 
+const prompts = new DownloadPrompts(browser.windows, browser.runtime.getURL('confirm/index.html'));
+browser.windows.onRemoved.addListener(id => prompts.closed(id));
 const tracker = new RequestTracker();
 const journal = new Journal(browser.storage.local);
 let config;
@@ -181,13 +184,16 @@ async function openManager() {
 async function addLinks(message, context) {
   if (!Array.isArray(message.links) || !message.links.length || message.links.length > 100) throw new Error('每次请添加 1–100 个链接');
   const links = message.links.map(validateLink); // validate the whole batch before sending anything
-  const s = server(message.serverId);
+  let s = server(message.serverId);
   if (!s) throw new Error('RPC 服务不存在');
+  const custom = message.options ? downloadOptions(message.options) : null;
+  if (custom?.out && links.length > 1) throw new Error('自定义文件名仅适用于单个链接');
+  if (custom) s = { ...s, dir: custom.dir };
   const result = [];
   for (const link of links) {
     const gid = makeGid();
     try {
-      const options = { ...requestOptions(link.startsWith('magnet:') ? null : context, s), gid };
+      const options = { ...requestOptions(link.startsWith('magnet:') ? null : context, s), ...(custom?.out ? { out: custom.out } : {}), ...(custom?.paused ? { pause: 'true' } : {}), gid };
       const added = await rpc(s, 'aria2.addUri', [[link], options]);
       result.push({ gid, state: added === gid ? 'added' : 'uncertain' });
     } catch (e) { result.push({ gid, state: e.kind === 'rejected' ? 'rejected' : 'uncertain' }); }
@@ -199,6 +205,16 @@ async function addLinks(message, context) {
 async function handle(message) {
   await ready;
   switch (message?.type) {
+    case 'CONFIRM_GET': return prompts.get(message.id);
+    case 'CONFIRM_DECIDE': {
+      prompts.get(message.id);
+      if (message.browser) { prompts.finish(message.id, null); return true; }
+      const selected = server(message.serverId);
+      if (!selected || verified[selected.id] !== serverSignature(selected)) throw new Error('请先成功测试所选 RPC，再发送下载');
+      const custom = downloadOptions(message.options);
+      prompts.finish(message.id, { server: { ...selected, dir: custom.dir }, options: custom.out ? { out: custom.out } : {}, paused: custom.paused });
+      return true;
+    }
     case 'SHORTCUTS_GET': return shortcuts.state;
     case 'SHORTCUTS_SAVE': {
       const saved = await shortcuts.save(message.shortcuts);
@@ -262,7 +278,7 @@ async function handle(message) {
 browser.runtime.onMessage.addListener((message, sender) => {
   const root = browser.runtime.getURL('');
   if (sender.id !== browser.runtime.id || !sender.url?.startsWith(root) ||
-    !['popup/index.html', 'options/index.html', 'manager/index.html'].includes(sender.url.slice(root.length).split(/[?#]/)[0])) return undefined;
+    !['popup/index.html', 'options/index.html', 'manager/index.html', 'confirm/index.html'].includes(sender.url.slice(root.length).split(/[?#]/)[0])) return undefined;
   return handle(message).then(data => ({ ok: true, data }), error => ({ ok: false, error: t(error.message), sourceError: error.message }));
 });
 
@@ -292,12 +308,19 @@ async function considerReady(item) {
   if (verified[s.id] !== serverSignature(s)) return;
   const context = tracker.match(item);
   if (!context) return;
-  await handoff.start(item, s, context);
+  await handoff.start(item, s, context, config.askBeforeDownload ? async (download, selected) => {
+    badge().catch(report);
+    return prompts.open({ downloadId: download.id, filename: download.filename.split(/[\\/]/).pop(), serverId: selected.id, dir: selected.dir,
+      source: new URL(context.url).hostname, size: download.totalBytes, storeId: download.cookieStoreId });
+  } : undefined);
   await refresh();
 }
 const report = () => notify('后台操作失败，请打开交接记录核对；浏览器下载未被主动删除').catch(() => {});
 browser.downloads.onCreated.addListener(item => { consider(item).catch(report); });
 browser.downloads.onChanged.addListener(delta => {
+  if (delta.state?.current === 'complete' || delta.paused?.current === false || delta.error?.current === 'USER_CANCELED') {
+    browser.downloads.search({ id: delta.id }).then(items => { const item = items[0]; if (!item || (!item.paused && (item.state !== 'in_progress' || delta.paused?.current === false))) prompts.changed(delta.id); }).catch(report);
+  }
   if (delta.state?.current === 'in_progress' || delta.filename || delta.url) {
     browser.downloads.search({ id: delta.id }).then(items => items[0] && consider(items[0])).catch(report);
   }
@@ -318,8 +341,15 @@ browser.menus.onClicked.addListener((info, tab) => {
   }
   if (info.menuItemId !== 'send-link') return;
   ready.then(async () => {
-    const s = server();
+    let s = server();
     let context;
+    let selectedId = s.id, custom;
+    if (config.askBeforeDownload) {
+      const choice = await prompts.open({ serverId: s.id, dir: s.dir, filename: '', source: new URL(info.linkUrl).hostname || 'magnet:', size: -1 });
+      if (!choice) return;
+      selectedId = choice.server.id; custom = { dir: choice.server.dir, out: choice.options.out || '', paused: choice.paused };
+      s = choice.server;
+    }
     if (s.forwardCookies && !info.linkUrl.startsWith('magnet:')) {
       // Private or cross-site manual sends need observed network context; do not synthesize cookies.
       if (tab.incognito || info.frameId !== 0 || !tab.cookieStoreId || new URL(tab.url).origin !== new URL(info.linkUrl).origin) {
@@ -328,7 +358,7 @@ browser.menus.onClicked.addListener((info, tab) => {
       const cookies = await browser.cookies.getAll({ url: info.linkUrl, storeId: tab.cookieStoreId, firstPartyDomain: null, partitionKey: {} });
       context = { cookie: selectCookies(cookies, tab.url), referer: info.pageUrl, userAgent: navigator.userAgent };
     }
-    const results = await addLinks({ serverId: s.id, links: [info.linkUrl] }, context);
+    const results = await addLinks({ serverId: selectedId, links: [info.linkUrl], options: custom }, context);
     await notify(results[0].state === 'added' ? '已发送到 aria2' : `发送结果待核对，GID：${results[0].gid}；请勿直接重复发送`);
   }).catch(error => notify(error.message));
 });

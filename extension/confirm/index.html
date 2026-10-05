@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aria2 Bridge</title><script src="../theme.js"></script><link rel="stylesheet" href="../styles.css"><script src="confirm.js" defer></script></head>
+<body class="confirmation"><main>
+<header class="confirm-heading"><img src="../icon.svg" width="40" height="40" alt=""><div><p class="eyebrow">下载确认</p><h1>这次下载如何保存？</h1></div></header>
+<p class="info-note">目录属于 aria2 所在机器。关闭此窗口会保留并恢复浏览器下载。</p>
+<div class="download-summary"><span id="source" data-user-content></span><span id="size"></span></div>
+<form id="confirmation">
+<label class="field"><span>RPC 服务</span><select id="server" disabled></select></label>
+<label class="field"><span>下载目录</span><input id="dir" type="text" maxlength="4096" placeholder="留空使用 aria2 默认目录" disabled></label>
+<label class="field"><span>文件名</span><input id="out" type="text" maxlength="255" placeholder="留空使用原文件名" disabled><small class="field-hint">只填写文件名，不包含目录；磁链和种子内容的文件名由种子决定。</small></label>
+<label class="switch-row"><span><strong>发送后保持暂停</strong><small>先添加到 aria2，稍后从管理页开始下载。</small></span><input id="paused" type="checkbox" role="switch" disabled></label>
+<div class="section-actions"><button id="submit" type="submit" disabled>发送到 aria2</button><button id="browser" type="button" class="secondary" disabled>继续浏览器下载</button><button id="test" type="button" class="secondary" disabled>测试连接</button></div>
+</form><p id="status" role="status" aria-live="polite">正在加载下载信息…</p>
+</main></body></html>

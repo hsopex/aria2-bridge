@@ -36,10 +36,10 @@ const angular = await readFile(angularFile, 'utf8');
 const compiler = 'new Function("$filter","getStringValue","ifDefined","plus",a)';
 if (!angular.includes(compiler) || !angular.includes('new Function("")')) throw new Error('Pinned Angular CSP paths no longer match');
 await writeFile(angularFile, angular.replace('new Function("")', 'void 0').replace(compiler, 'function(){throw Error("Aria2 Bridge requires the CSP interpreter")}'));
-await build({ entryPoints: { background: 'src/background.js', theme: 'src/ui/theme-entry.js', 'popup/popup': 'src/ui/popup.js', 'options/options': 'src/ui/options.js', 'manager/bridge': 'src/ui/manager.js' },
+await build({ entryPoints: { background: 'src/background.js', theme: 'src/ui/theme-entry.js', 'popup/popup': 'src/ui/popup.js', 'options/options': 'src/ui/options.js', 'confirm/confirm': 'src/ui/confirm.js', 'manager/bridge': 'src/ui/manager.js' },
   outdir: out, bundle: true, format: 'iife', target: 'firefox140', sourcemap: false, legalComments: 'eof' });
 // Ensure no executable inline scripts or remote script dependencies slipped into HTML.
-for (const dir of ['', '/popup', '/options', '/manager']) {
+for (const dir of ['', '/popup', '/options', '/manager', '/confirm']) {
   for (const file of await readdir(out + dir)) {
     if (!file.endsWith('.html')) continue;
     const page = await readFile(`${out}${dir}/${file}`, 'utf8');

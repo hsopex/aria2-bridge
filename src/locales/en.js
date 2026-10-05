@@ -1,5 +1,44 @@
 // Source phrases are Chinese; longest-match translation also handles dynamic counts.
 export const english = Object.fromEntries(`
+目录属于 aria2 所在机器。关闭此窗口会取消发送，不创建 aria2 任务。|The directory is on the aria2 machine. Closing this window cancels sending without creating an aria2 task.
+设置菜单|Settings menu
+下载确认|Download confirmation
+这次下载如何保存？|How should this download be saved?
+目录属于 aria2 所在机器。关闭此窗口会保留并恢复浏览器下载。|The directory is on the aria2 machine. Closing this window keeps and resumes the browser download.
+下载目录|Download directory
+留空使用 aria2 默认目录|Leave blank to use aria2's default directory
+留空使用原文件名|Leave blank to use the original filename
+只填写文件名，不包含目录；磁链和种子内容的文件名由种子决定。|Enter a filename without a directory. Magnet and torrent contents use filenames from the torrent.
+发送后保持暂停|Keep paused after adding
+先添加到 aria2，稍后从管理页开始下载。|Add to aria2 now and start later from the manager.
+正在加载下载信息…|Loading download details…
+大小未知|Size unknown
+取消发送|Cancel
+确认后才会发送，当前尚未提交 aria2|Nothing has been sent to aria2. Confirm to send.
+每次下载前询问|Ask before each download
+自动接管和右键发送时，先选择服务、目录、文件名及是否暂停。|For automatic takeover and context-menu sends, choose a service, directory, filename and pause state first.
+常用动作与键盘快捷键|Common actions and keyboard shortcuts
+管理标签页与侧栏的共享偏好|Shared preferences for manager tabs and the sidebar
+连接与管理你的 aria2 服务|Connect and manage your aria2 services
+选择自动发送或每次询问|Choose automatic sending or confirmation each time
+决定哪些下载由 aria2 接管|Choose which downloads aria2 takes over
+备份与恢复服务配置|Back up and restore service configuration
+核对每次下载的处理状态|Check the status of each download
+主题和语言在“外观”中设置。|Set theme and language under Appearance.
+在“RPC 服务”中管理。|Configure these under RPC services.
+下载选项无效|Invalid download options
+下载目录无效|Invalid download directory
+文件名不能包含路径分隔符或换行|Filenames cannot contain path separators or line breaks
+暂停选项无效|Invalid pause option
+询问选项无效|Invalid confirmation option
+询问已结束，浏览器下载已恢复或已处理|This confirmation has ended; the browser download was resumed or handled
+自定义文件名仅适用于单个链接|A custom filename can only be used with one URL
+请先成功测试所选 RPC，再发送下载|Test the selected RPC successfully before sending the download
+等待选择下载方式，尚未发送 aria2|Waiting for your choice; nothing sent to aria2
+已选择浏览器下载，未提交 aria2|Browser download selected; nothing sent to aria2
+询问失败，已恢复浏览器下载|Confirmation failed; browser download resumed
+本次下载选项|Options for this download
+主题和语言在“外观”中设置。刷新间隔修改后，已打开的管理页会重新加载；其他偏好立即生效。任务通知仅在管理页打开时有效，声音是否播放由系统决定。RPC 地址、Secret、目录与服务选择在“RPC 服务”中管理。|Set theme and language under Appearance. Refresh interval changes reload open managers; other preferences apply immediately. Task notifications require an open manager; sound depends on your system. Manage RPC addresses, secrets, directories and services under RPC services.
 界面语言|Interface language
 语言应用于插件页面、右键菜单、通知及 AriaNg 标签页和侧栏。|Language applies to extension pages, context menus, notifications, AriaNg tabs and the sidebar.
 界面语言已自动保存|Interface language saved

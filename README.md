@@ -16,13 +16,21 @@ Right-click the toolbar icon and open **Aria2 Bridge Quick Actions** to open the
 
 The toolbar icon is green when automatic takeover is enabled and gray when disabled. Its badge shows the default RPC service's unfinished task count (downloading plus waiting or paused), capped at 99 and hidden when there are no tasks. Hover over the icon for the full count and takeover status. Unconfirmed handoffs make the badge orange; when the count is unknown or zero, it displays `?`. Disconnecting or switching services clears stale counts. An open manager page supplies status updates; otherwise, the background checks once per minute. Adding, removing or handing off tasks through the extension also refreshes the count.
 
-Under **Appearance**, choose Light, Dark or System. Theme changes take effect immediately, are saved locally, and apply to the toolbar popup, AriaNg tabs and the sidebar. RPC settings and filters require clicking **Save settings** at the bottom. Connection test results appear in the corresponding service card.
+Under **Appearance**, choose Light, Dark or System. Theme changes take effect immediately, are saved locally, and apply to the toolbar popup, AriaNg tabs and the sidebar. RPC settings and filters require clicking **Save settings** at the bottom. Connection test results appear in the corresponding service card. Each settings menu opens its own panel; URL hashes and browser Back/Forward navigation select panels while preserving unsaved edits.
 
 **Appearance → Interface language** controls both the extension and AriaNg. Simplified Chinese and English are available, with Simplified Chinese as the default. Changes apply to settings, the popup, context menus, notifications, toolbar tooltips, manager tabs and the sidebar without overwriting unsaved inputs. There is only one language setting; an existing English preference is retained as the shared language.
 
 **AriaNg preferences** centralizes titles, refresh intervals, task notifications, shortcuts, gestures, drag-and-drop, removal confirmation, retry behavior, list sorting and task details. Changes are saved automatically. Themes and ordinary preferences apply live; changing refresh intervals reloads open manager pages, so finish editing new tasks first. The original AriaNg settings page provides an entry point to extension settings. RPC methods and headers, WebSocket reconnection and debug mode are not configurable: the extension consistently uses background HTTP POST and stores no additional RPC credentials or debug logs. Configuration backups currently include only RPC settings and takeover rules.
 
 Domain filters support exact domains and `*.example.com` (subdomains only, excluding `example.com` itself). Extension filters are case-insensitive and support compound extensions such as `tar.gz`. Separate entries with lines or commas. Exclusions take priority; an empty allow list imposes no restriction.
+
+## Download confirmation
+
+Under **Download takeover**, enable **Ask before each download** and save settings. It is off by default to preserve automatic behavior. Eligible automatic handoffs and context-menu sends then open a confirmation window where you can choose a tested RPC service, change the remote directory and filename, or keep the new aria2 task paused. These overrides apply to that task only. Filenames must not contain directory separators; torrent and magnet contents retain the filenames defined by the torrent.
+
+For automatic handoffs, Firefox pauses the original download before asking. Nothing is submitted to aria2 until you confirm. Choosing **Resume browser download**, closing the window or failing to open it keeps the task in Firefox. A background restart resumes downloads still awaiting a choice without submitting them. Each concurrent download has its own confirmation; request headers remain in memory and are never included in the confirmation URL or handoff journal.
+
+The toolbar's manual add form also has an **Options for this download** section for directory, filename and pause state. A custom filename is available for a single URL; batch additions share the chosen directory and pause state. AriaNg's own new-task page retains its native controls.
 
 ## Automatic handoff and recovery
 

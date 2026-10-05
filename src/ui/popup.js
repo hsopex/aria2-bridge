@@ -14,6 +14,7 @@ async function init() {
   config = await send('CONFIG_PUBLIC');
   serverOptions($('#server'), config);
   $('#enabled').checked = config.enabled;
+  $('#dir').value = config.servers.find(s => s.id === config.defaultServerId).dir;
   await update();
   const records = await send('HANDOFFS');
   const pending = records.filter(r => ['pending', 'conflict', 'accepted', 'cancelling', 'cancelled', 'submitting'].includes(r.state)).length;
@@ -27,7 +28,7 @@ $('#server').addEventListener('change', async () => {
   try {
     await send('SELECT_SERVER', { serverId: $('#server').value });
     config = await send('CONFIG_PUBLIC');
-    $('#enabled').checked = false; await update();
+    $('#enabled').checked = false; $('#dir').value = config.servers.find(s => s.id === config.defaultServerId).dir; await update();
   } catch (error) { $('#server').value = config.defaultServerId; textStatus(error.message); }
 });
 $('#test').addEventListener('click', async () => {
@@ -37,7 +38,7 @@ $('#test').addEventListener('click', async () => {
 $('#links').addEventListener('submit', async event => {
   event.preventDefault(); $('#add').disabled = true;
   try {
-    const result = await send('ADD', { serverId: $('#server').value, links: $('#urls').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean) });
+    const result = await send('ADD', { serverId: $('#server').value, options: { dir: $('#dir').value, out: $('#out').value, paused: $('#paused').checked }, links: $('#urls').value.split(/\r?\n/).map(s => s.trim()).filter(Boolean) });
     textStatus(result.map(r => `${r.state === 'added' ? '已添加' : r.state === 'rejected' ? '被拒绝' : '结果待确认，请勿重复发送'} · ${r.gid}`).join('\n'));
     $('#urls').value = '';
     send('STATUS', { refresh: true }).then(updateTaskCount).catch(() => {});

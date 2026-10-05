@@ -86,6 +86,18 @@ try {
   await request(route('/moz/context'), { context: 'content' });
   await navigate(base + 'options/index.html');
   await until(() => execute('return document.querySelectorAll("#servers fieldset").length'), n => n === 1, 'settings rendered');
+  const panelIds = ['appearance','shortcuts','manager-preferences','rpc','takeover','filters','data','history'];
+  for (const id of panelIds) {
+    await execute('location.hash=arguments[0];',[id]);
+    await until(()=>execute('return [...document.querySelectorAll(".settings-section")].filter(s=>!s.hidden).map(s=>s.id);'),ids=>ids.length===1 && ids[0]===id,'single settings panel '+id);
+  }
+  await execute('location.hash="rpc"; const input=document.querySelector(".server-card input[type=text]"); window.savedName=input.value; input.value="panel-draft"; input.dispatchEvent(new Event("input",{bubbles:true}));');
+  await execute('location.hash="filters";'); await until(()=>execute('return !document.querySelector("#filters").hidden'),Boolean,'filters navigation');
+  await request(route('/back'), {}); await until(()=>execute('return !document.querySelector("#rpc").hidden'),Boolean,'browser back selects previous panel');
+  assert.equal(await execute('return document.querySelector(".server-card input[type=text]").value'),'panel-draft','navigation keeps unsaved values');
+  await execute('const input=document.querySelector(".server-card input[type=text]"); input.value=window.savedName; input.dispatchEvent(new Event("input",{bubbles:true})); document.querySelector("#save").click();');
+  await until(()=>execute('return document.querySelector("#save-state").dataset.state'),value=>value==='saved','restored draft saved');
+  await execute('location.hash="appearance";');
   await mkdir('dist/validation', { recursive: true });
   for (const theme of ['light', 'dark']) {
     await execute('const select=document.querySelector("#theme"); select.value=arguments[0]; select.dispatchEvent(new Event("change",{bubbles:true}));', [theme]);
@@ -103,9 +115,16 @@ try {
   await until(() => execute('return window.innerWidth'), width => width >= 450 && width <= 510, 'narrow viewport resize');
   const narrow = await execute('return {width:innerWidth, scroll:document.documentElement.scrollWidth, overflow:[...document.querySelectorAll("body *")].filter(e=>e.getBoundingClientRect().right>innerWidth).map(e=>({tag:e.tagName,cls:e.className,id:e.id,right:e.getBoundingClientRect().right}))}');
   assert.ok(narrow.scroll <= narrow.width, `settings fit narrow viewport: ${JSON.stringify(narrow)}`);
+  assert.ok(await execute('return getComputedStyle(document.querySelector(".mobile-navigation")).display!=="none"'),'compact navigation is visible on narrow screens');
+  await execute('const select=document.querySelector("#settings-navigation"); select.value="shortcuts"; select.dispatchEvent(new Event("change",{bubbles:true}));');
+  await until(()=>execute('return !document.querySelector("#shortcuts").hidden'),Boolean,'compact menu switches panel');
+  await execute('const select=document.querySelector("#settings-navigation"); select.value="appearance"; select.dispatchEvent(new Event("change",{bubbles:true}));');
+  await until(()=>execute('return !document.querySelector("#appearance").hidden'),Boolean,'compact menu restores appearance');
   await writeFile(`dist/validation/firefox-${created.capabilities.browserVersion}-settings-mobile.png`, Buffer.from(await request(route('/screenshot'), undefined, 'GET'), 'base64'));
   await request(route('/window/rect'), { width: 1280, height: 900 });
   await until(() => execute('return !document.querySelector("#new").disabled'), Boolean, 'settings ready');
+  await execute('location.hash="rpc";');
+  await until(() => execute('return !document.querySelector("#rpc").hidden'),Boolean,'RPC panel visible');
   await execute('document.querySelector("#new").click(); const cards=document.querySelectorAll(".server-card"); cards[1].querySelector("input[type=radio]").click(); cards[1].querySelector("[data-action=remove]").click();');
   assert.ok(await execute('return document.querySelector(".server-card input[type=radio]").checked'), 'default follows remaining server');
   assert.equal(await execute('return document.querySelector("#save-state").dataset.state'), 'dirty');
@@ -274,7 +293,7 @@ try {
   await until(() => execute('return browser.extension.getViews().some(w=>w.location.pathname.includes("/options/") && !w.document.querySelector("#manager-language")?.disabled && w.document.querySelector(".server-card input[type=password]"))'), Boolean, 'global language control ready');
   await execute('window.languageProbe="preserved"; const w=browser.extension.getViews().find(w=>w.location.pathname.includes("/options/")); const input=w.document.querySelector(".server-card input[type=password]"); w.originalSecret=input.value; input.value="unsaved-local-secret"; input.dispatchEvent(new w.Event("input",{bubbles:true})); const select=w.document.querySelector("#manager-language"); select.value="en"; select.dispatchEvent(new w.Event("change",{bubbles:true}));');
   await until(() => message('MANAGER_PREFERENCES_GET'), prefs=>prefs.language==='en', 'single language setting persisted');
-  await until(() => execute('return browser.extension.getViews().filter(w=>w.location.pathname.endsWith("/index.html")).map(w=>({path:w.location.pathname,lang:w.document.documentElement.lang,text:w.document.body.innerText}));'), views => views.every(w=>w.lang==='en') && views.some(w=>w.path.includes('/options/') && w.text.includes('Downloads, your way')) && views.some(w=>w.path.includes('/popup/') && w.text.includes('Test connection')), 'all extension pages use English live');
+  await until(() => execute('return browser.extension.getViews().filter(w=>w.location.pathname.endsWith("/index.html")).map(w=>({path:w.location.pathname,lang:w.document.documentElement.lang,text:w.document.body.innerText}));'), views => views.every(w=>w.lang==='en') && views.some(w=>w.path.includes('/options/') && w.text.includes('Interface language')) && views.some(w=>w.path.includes('/popup/') && w.text.includes('Test connection')), 'all extension pages use English live');
   await until(() => execute('return browser.extension.getViews({type:"sidebar"})[0]?.angular.element(browser.extension.getViews({type:"sidebar"})[0].document).injector().get("ariaNgSettingService").getLanguage()'), value=>value==='en', 'sidebar switches language live');
   assert.equal(await execute('return window.languageProbe'), 'preserved', 'language changes preserve manager document');
   assert.equal(await execute('return browser.extension.getViews().find(w=>w.location.pathname.includes("/options/")).document.querySelector(".server-card input[type=password]").value'), 'unsaved-local-secret', 'language switch preserves unsaved form values');
@@ -286,7 +305,7 @@ try {
   await until(() => execute('return document.querySelector("[ng-view]")?.innerText || ""'), text=>text.includes('managed in extension settings'), 'bridge native settings explanation uses English');
   await message('MANAGER_PREFERENCES_PATCH',{patch:{language:'zh_Hans'}});
   await until(() => execute('return browser.extension.getViews().filter(w=>w.location.pathname.endsWith("/index.html")).every(w=>w.document.documentElement.lang==="zh-CN")'),Boolean,'all extension pages revert to Chinese live');
-  await until(() => execute('return browser.extension.getViews().find(w=>w.location.pathname.includes("/options/"))?.document.querySelector("h1").textContent'), value=>value==='让下载按你的方式运行','original Chinese labels restored');
+  await until(() => execute('return browser.extension.getViews().find(w=>w.location.pathname.includes("/options/"))?.document.querySelector("h1").textContent'), value=>value==='外观','original Chinese labels restored');
   await execute('const w=browser.extension.getViews().find(w=>w.location.pathname.includes("/options/")); w.document.querySelector(".server-card input[type=password]").value=w.originalSecret; w.document.querySelector("#save").click();');
   await until(() => execute('return browser.extension.getViews().find(w=>w.location.pathname.includes("/options/"))?.document.querySelector("#save-state").dataset.state'),value=>value==='saved','restored unsaved editor');
   await request(route('/execute/async'),{script:'const done=arguments[arguments.length-1]; browser.tabs.remove(arguments[0]).then(done);',args:[languageTabs]});
@@ -375,6 +394,47 @@ try {
     assert.ok(received.some(r => r.cookie === `account=account${i}`));
   }
   assert.ok(received.every(r => !r.cookie.includes('account0') || !r.cookie.includes('account1')));
+  await navigate(base+'options/index.html#takeover');
+  await until(()=>execute('return !document.querySelector("#ask-before-download").disabled'),Boolean,'ask preference ready');
+  await execute('document.querySelector("#ask-before-download").checked=true; document.querySelector("#save").click();');
+  await until(()=>message('CONFIG_GET'),c=>c.askBeforeDownload===true,'ask preference saved');
+  for (const action of ['send','browser','close']) {
+    await navigate(site+'/page?ask='+action); await execute('document.querySelector("#download").click();');
+    await delay(600);
+    await navigate(base+'options/index.html#history');
+    const pending=await until(()=>message('HANDOFFS'),records=>records.some(r=>r.state==='awaiting'),'download awaiting choice').catch(async error=>{console.error('Prompt diagnosis',await message('CONFIG_PUBLIC'),await message('HANDOFFS'),await request(route('/execute/async'),{script:'const done=arguments[arguments.length-1]; browser.downloads.search({}).then(items=>done(items.map(i=>({id:i.id,state:i.state,paused:i.paused,bytes:i.bytesReceived,url:i.url,store:i.cookieStoreId}))));',args:[]}));throw error;});
+    const awaiting=pending.find(r=>r.state==='awaiting');
+    const before=await message('RPC',{method:'aria2.getGlobalStat'});
+    await until(()=>execute('return browser.extension.getViews().some(w=>w.location.pathname.includes("/confirm/") && !w.document.querySelector("#submit")?.disabled)'),Boolean,'confirmation window loaded');
+    if(action==='send') {
+      await execute('const w=browser.extension.getViews().find(w=>w.location.pathname.includes("/confirm/")); const selected=w.document.querySelector("#server"); selected.value="second"; selected.dispatchEvent(new w.Event("change",{bubbles:true})); w.document.querySelector("#dir").value=arguments[0]; w.document.querySelector("#out").value="../unsafe.zip"; w.document.querySelector("#confirmation").requestSubmit();',[temp+'/custom-downloads']);
+      await until(()=>execute('return browser.extension.getViews().find(w=>w.location.pathname.includes("/confirm/"))?.document.querySelector("#status").textContent'),value=>value?.includes('文件名不能包含'),'invalid name stays in confirmation');
+      assert.equal((await message('HANDOFFS')).find(r=>r.downloadId===awaiting.downloadId).state,'awaiting');
+      await message('MANAGER_PREFERENCES_PATCH',{patch:{language:'en'}});
+      await until(()=>execute('return browser.extension.getViews().find(w=>w.location.pathname.includes("/confirm/"))?.document.querySelector("#submit").textContent'),text=>text==='Send to aria2','confirmation language updates live');
+      assert.equal(await execute('return browser.extension.getViews().find(w=>w.location.pathname.includes("/confirm/"))?.document.querySelector("#out").value'),'../unsafe.zip','language preserves download edits');
+      const promptHandles=await request(route('/window/handles'),undefined,'GET'); await request(route('/window'),{handle:promptHandles.at(-1)});
+      assert.ok((await execute('return location.pathname')).includes('/confirm/'));
+      await writeFile(`dist/validation/firefox-${created.capabilities.browserVersion}-confirmation.png`,Buffer.from(await request(route('/screenshot'),undefined,'GET'),'base64'));
+      await request(route('/window'),{handle:extensionHandle});
+      await message('MANAGER_PREFERENCES_PATCH',{patch:{language:'zh_Hans'}});
+      await execute('const w=browser.extension.getViews().find(w=>w.location.pathname.includes("/confirm/")); w.document.querySelector("#out").value="自定义.zip"; w.document.querySelector("#paused").checked=true; w.document.querySelector("#confirmation").requestSubmit();');
+      const transferred=await until(()=>message('HANDOFFS'),records=>records.find(r=>r.downloadId===awaiting.downloadId)?.state==='transferred','confirmed handoff');
+      const record=transferred.find(r=>r.downloadId===awaiting.downloadId);
+      assert.equal(record.serverId,'second','confirmation can choose a different RPC');
+      const options=await message('RPC',{serverId:record.serverId,method:'aria2.getOption',params:[record.gid]});
+      assert.equal(options.dir,temp+'/custom-downloads'); assert.equal(options.out,'自定义.zip');
+      const task=await message('RPC',{serverId:record.serverId,method:'aria2.tellStatus',params:[record.gid,['status']]}); assert.equal(task.status,'paused');
+      assert.equal((await message('CONFIG_GET')).servers.find(s=>s.id===record.serverId).dir,config.servers.find(s=>s.id===record.serverId).dir,'one-task path does not modify defaults');
+      await message('RPC',{serverId:record.serverId,method:'aria2.forceRemove',params:[record.gid]});
+    } else {
+      await execute('const w=browser.extension.getViews().find(w=>w.location.pathname.includes("/confirm/")); if(arguments[0]==="close")w.close();else w.document.querySelector("#browser").click();',[action]);
+      await until(()=>message('HANDOFFS'),records=>records.find(r=>r.downloadId===awaiting.downloadId)?.state==='resumed','browser fallback after '+action);
+      const after=await message('RPC',{method:'aria2.getGlobalStat'});assert.equal(after.numWaiting,before.numWaiting,'browser fallback adds no aria2 task');
+    }
+    await until(()=>execute('return !browser.extension.getViews().some(w=>w.location.pathname.includes("/confirm/"))'),Boolean,'confirmation window closed');
+  }
+  console.log(`Firefox ${created.capabilities.browserVersion}: single settings panels, browser-back drafts, per-download confirmation, custom path/name, invalid name rejection, paused aria2 and close/browser fallback passed`);
   console.log(`Firefox ${created.capabilities.browserVersion}: toolbar takeover state, 105 tasks capped at 99, zero/offline clearing and RPC switching passed`);
   console.log(`Firefox ${created.capabilities.browserVersion}: CSP AriaNg, sidebar, bad Secret, multiple RPC services, remote directories, batch/magnet, container isolation, redirects, unknown size and partitioned cookies passed (${ariaRequests.length} default-agent requests)`);
 } finally {

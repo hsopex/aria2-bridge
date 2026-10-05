@@ -151,3 +151,42 @@ article button { margin-right: 10px; margin-bottom: 6px; }
 #manager-preference-status, #shortcut-status { font-size: 12px; overflow-wrap: anywhere; }
 #manager-preference-status[data-kind="success"], #shortcut-status[data-kind="success"] { color: var(--success); }
 #manager-preference-status[data-kind="error"], #shortcut-status[data-kind="error"] { color: var(--danger); }
+
+[hidden] { display: none !important; }
+.options .settings-shell { max-width: 1360px; grid-template-columns: 240px minmax(0, 1fr); gap: 40px; padding-top: 32px; }
+.options .settings-sidebar { top: 32px; padding: 22px 16px 4px; border-radius: 18px; background: var(--surface); border: 1px solid var(--border); }
+.options .settings-sidebar nav { margin: 24px 0 16px; }
+.options .settings-sidebar nav a { display: flex; align-items: center; gap: 12px; }
+.options .settings-sidebar nav a > span { width: 20px; text-align: center; font-size: 19px; }
+.options .settings-sidebar nav a[aria-current] { box-shadow: inset 3px 0 var(--primary); font-weight: 650; }
+.options .page-header { min-height: 100px; margin-bottom: 22px; }
+.options .settings-section { margin-bottom: 0; padding: 30px; border-radius: 18px; }
+.options .appearance-row + .appearance-row { margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--border); }
+.options .settings-section > .section-heading { padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.options .section-heading h2 { font-size: 16px; }
+.options .save-bar { box-shadow: 0 -5px 25px #00000008; }
+.confirmation { max-width: 680px; margin: auto; }
+.confirmation main { padding: 28px; }
+.confirm-heading { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
+.confirm-heading h1 { font-size: 23px; margin: 0; }
+.confirm-heading .eyebrow { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.confirmation form { display: grid; gap: 18px; margin-top: 22px; }
+.confirmation .switch-row { margin: 0; }
+.confirmation .section-actions { margin: 0; }
+.download-summary { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); overflow-wrap: anywhere; font-size: 12px; }
+@media (max-width: 900px) { .options .settings-shell { grid-template-columns: 195px minmax(0,1fr); gap: 20px; } .options .settings-section { padding: 22px; } }
+@media (max-width: 680px) {
+  .options .settings-shell { display: block; padding: 16px 16px 130px; }
+  .options .settings-sidebar { padding: 16px; margin-bottom: 24px; }
+  .options .settings-sidebar nav { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 0; }
+  .options .settings-sidebar nav a { padding: 9px; gap: 7px; }
+  .options .settings-section { padding: 20px; }
+  .confirmation main { padding: 20px; }
+  .confirmation .section-actions button { white-space: normal; }
+}
+
+.mobile-navigation { display: none; }
+.options .settings-sidebar { max-height: calc(100vh - 140px); overflow-y: auto; }
+.options .settings-sidebar nav a { padding: 10px 12px; }
+.options .settings-sidebar nav a > span { line-height: 1; }
+@media (max-width: 680px) { .options .settings-sidebar { max-height: none; overflow: visible; } .options .settings-sidebar nav { display: none; } .mobile-navigation { display: grid; margin-top: 16px; } }

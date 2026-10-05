@@ -1,6 +1,6 @@
 export const CONFIG_VERSION = 1;
 export const defaults = () => ({
-  version: CONFIG_VERSION, enabled: false, defaultServerId: 'local',
+  version: CONFIG_VERSION, enabled: false, askBeforeDownload: false, defaultServerId: 'local',
   servers: [{ id: 'local', name: '本机 aria2', url: 'http://127.0.0.1:6800/jsonrpc', secret: '', dir: '', forwardCookies: false }],
   filters: { allowDomains: [], denyDomains: [], allowExtensions: [], denyExtensions: [] },
 });
@@ -42,7 +42,8 @@ export function normalizeConfig(input) {
       return ext;
     }))];
   }
-  return { version: CONFIG_VERSION, enabled: input.enabled === true, defaultServerId: input.defaultServerId, servers, filters };
+  if (input.askBeforeDownload !== undefined && typeof input.askBeforeDownload !== 'boolean') throw new Error('询问选项无效');
+  return { version: CONFIG_VERSION, enabled: input.enabled === true, askBeforeDownload: input.askBeforeDownload === true, defaultServerId: input.defaultServerId, servers, filters };
 }
 
 export const serverSignature = s => JSON.stringify([s.url, s.secret]);
