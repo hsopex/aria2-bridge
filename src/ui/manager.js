@@ -1,3 +1,4 @@
+import { translateText } from '../core/language.js';
 import { preferenceFields, preferenceSetter } from '../core/manager-preferences.js';
 import { send } from './common.js';
 
@@ -22,7 +23,7 @@ async function start() {
   const menuServers = () => [...config.servers].sort((a, b) => preferences.rpcListDisplayOrder === 'rpcAlias' ? a.name.localeCompare(b.name, undefined, { numeric: true }) : Number(b.id === config.defaultServerId) - Number(a.id === config.defaultServerId));
   const selected = config.servers.find(s => s.id === config.defaultServerId);
   const app = angular.module('ariaNg');
-  const settingsTemplate = '<section class="content"><h2>Aria2 Bridge</h2><p>AriaNg 主题、语言、通知、列表与操作偏好，以及 RPC 和下载接管配置，均由插件设置统一管理。标签页与侧栏共用。</p><button class="btn btn-primary" ng-click="openBridgeSettings()">打开设置与交接记录</button><hr><p>AriaNg 1.3.14 · 所有脚本、模板和语言资源均已内置。</p></section>';
+  const settingsTemplate = '<section class="content"><h2>Aria2 Bridge</h2><p data-bridge-i18n>AriaNg 主题、语言、通知、列表与操作偏好，以及 RPC 和下载接管配置，均由插件设置统一管理。标签页与侧栏共用。</p><button data-bridge-i18n class="btn btn-primary" ng-click="openBridgeSettings()">打开设置与交接记录</button><hr><p data-bridge-i18n>AriaNg 1.3.14 · 所有脚本、模板和语言资源均已内置。</p></section>';
   app.config(['$provide', '$compileProvider', '$routeProvider', function ($provide, $compileProvider, $routeProvider) {
     $compileProvider.aHrefSanitizationWhitelist(/^\s*(https?|ftp|mailto|tel|file|blob|magnet|moz-extension):/);
     for (const path of ['/settings/ariang', '/settings/ariang/:extendType']) $routeProvider.when(path, { template: settingsTemplate });
@@ -69,7 +70,7 @@ async function start() {
           context.successCallback?.(body.id, result);
         }, error => {
           context.connectionFailedCallback?.({ rpcUrl: selected.url, method: 'POST' });
-          context.errorCallback?.(body.id, { message: error.message });
+          context.errorCallback?.(body.id, { message: translateText(error.message, preferences.language) });
         });
       },
       reconnect() {}, on() {},
@@ -108,5 +109,5 @@ async function start() {
   });
 }
 start().catch(() => {
-  const p = document.createElement('p'); p.textContent = '后台未就绪，请重新打开 AriaNg 或在插件设置中检查配置。'; document.body.replaceChildren(p);
+  const p = document.createElement('p'); p.dataset.bridgeI18n = ''; p.textContent = '后台未就绪，请重新打开 AriaNg 或在插件设置中检查配置。'; document.body.replaceChildren(p);
 });

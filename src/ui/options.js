@@ -31,7 +31,9 @@ function field(label, value, type = 'text', hint = '') {
 }
 function updateTitles() {
   for (const [id, e] of editors) {
-    e.title.textContent = e.inputs.name.value.trim() || '未命名服务';
+    const name = e.inputs.name.value.trim();
+    if (name) e.title.dataset.userContent = ''; else delete e.title.dataset.userContent;
+    e.title.textContent = name || '未命名服务';
     e.badge.hidden = config.defaultServerId !== id;
     e.card.classList.toggle('is-default', config.defaultServerId === id);
   }
@@ -40,7 +42,7 @@ function render() {
   editors.clear(); $('#servers').replaceChildren();
   for (const server of config.servers) {
     const card = document.createElement('fieldset'); card.className = 'server-card';
-    const legend = document.createElement('legend'); const title = document.createElement('span');
+    const legend = document.createElement('legend'); const title = document.createElement('span'); title.dataset.userContent = '';
     const badge = document.createElement('span'); badge.className = 'default-badge'; badge.textContent = '默认';
     legend.append(title, badge); card.append(legend);
     const grid = document.createElement('div'); grid.className = 'server-grid';
@@ -182,7 +184,7 @@ async function initializeManagerPreferences() {
   for (const group of preferenceGroups) {
     const title = document.createElement('h3'); title.textContent = group.label;
     const grid = document.createElement('div'); grid.className = 'server-grid preference-grid';
-    for (const f of group.fields) {
+    for (const f of group.fields.filter(f => f.key !== 'language')) {
       const label = document.createElement('label'); label.className = f.type === 'boolean' ? 'toggle' : 'field';
       const span = document.createElement('span'); span.textContent = f.label;
       const input = document.createElement(f.type === 'select' ? 'select' : 'input');
@@ -216,6 +218,8 @@ async function initializeManagerPreferences() {
     }
     $('#manager-preference-fields').append(title, grid);
   }
+  $('#manager-language').disabled = false;
+  preferenceControls.set('language', $('#manager-language'));
   renderManagerPreferences(values);
   browser.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.managerPreferences) {
@@ -298,4 +302,11 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (area === 'local' && changes.config?.newValue && config && !dirty && !busy) {
     config = changes.config.newValue; render(); setDirty(false);
   }
+});
+
+$('#manager-language').addEventListener('change', async () => {
+  const input = $('#manager-language'); const previous = document.documentElement.lang === 'en' ? 'en' : 'zh_Hans'; input.disabled = true;
+  try { await send('MANAGER_PREFERENCES_PATCH', { patch: { language: input.value } }); status('界面语言已自动保存'); }
+  catch (error) { input.value = previous; status(error.message, 'error'); }
+  finally { input.disabled = false; }
 });

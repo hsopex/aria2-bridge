@@ -1,6 +1,8 @@
+import { initializeLanguage } from './language.js';
+initializeLanguage();
 export async function send(type, fields = {}) {
   const response = await browser.runtime.sendMessage({ type, ...fields });
-  if (!response?.ok) throw new Error(response?.error || '后台未响应');
+  if (!response?.ok) throw new Error(response?.sourceError || response?.error || '后台未响应');
   return response.data;
 }
 export const $ = selector => document.querySelector(selector);
@@ -12,7 +14,7 @@ export const speed = value => {
 export function serverOptions(select, config) {
   select.replaceChildren(...config.servers.map(s => {
     const option = document.createElement('option');
-    option.value = s.id; option.textContent = s.name; return option;
+    option.dataset.userContent = ''; option.value = s.id; option.textContent = s.name; return option;
   }));
   select.value = config.defaultServerId;
 }
@@ -21,7 +23,7 @@ export function showHandoffs(records, container, reload) {
   const active = new Set(['preparing', 'submitting', 'pending', 'accepted', 'cancelling', 'cancelled', 'conflict']);
   for (const r of records.slice(0, 50)) {
     const row = document.createElement('article');
-    const title = document.createElement('strong'); title.textContent = r.filename || `下载 ${r.downloadId}`;
+    const title = document.createElement('strong'); if (r.filename) title.dataset.userContent = ''; title.textContent = r.filename || `下载 ${r.downloadId}`;
     const note = document.createElement('p'); note.textContent = `${r.note || r.state} · GID ${r.gid}`;
     row.append(title, note);
     if (active.has(r.state)) {

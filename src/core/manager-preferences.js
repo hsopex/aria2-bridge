@@ -1,14 +1,14 @@
+import { languages } from './language.js';
 // Allowlisted AriaNg presentation preferences. RPC credentials and debug/export
 // controls never pass through this store.
 const bool = (key, label, value = true) => ({ key, label, type: 'boolean', default: value });
 const choice = (key, label, value, options) => ({ key, label, type: 'select', default: value, options });
-const languages = [['en', 'English'], ['zh_Hans', '简体中文'], ['zh_Hant', '繁體中文'], ['ja_JP', '日本語'], ['cz_CZ', 'Čeština'], ['de_DE', 'Deutsch'], ['es', 'Español'], ['fr_FR', 'Français'], ['it_IT', 'Italiano'], ['pl_PL', 'Polski'], ['ru_RU', 'Русский']];
 const interval = (key, label, value) => choice(key, label, value, [1000, 2000, 5000, 10000, 30000, 60000].map(v => [v, `${v / 1000} 秒`]));
 const sortOptions = fields => [['default:asc', '默认顺序'], ...fields.flatMap(([key, text]) => [[`${key}:asc`, `${text}升序`], [`${key}:desc`, `${text}降序`]])];
 const taskSort = sortOptions([['name', '文件名'], ['size', '大小'], ['percent', '进度'], ['remain', '剩余时间'], ['dspeed', '下载速度'], ['uspeed', '上传速度']]);
 export const preferenceGroups = [
   { label: '语言与页面', fields: [
-    choice('language', '管理界面语言', 'en', languages),
+    choice('language', '界面语言', 'zh_Hans', languages),
     choice('rpcListDisplayOrder', 'RPC 服务菜单顺序', 'recentlyUsed', [['recentlyUsed', '默认服务优先'], ['rpcAlias', '按服务名称']]),
     { key: 'title', label: '管理标签页标题', type: 'text', default: '${downspeed}, ${upspeed} - ${title}', hint: '支持 ${title}、${rpcprofile}、${downloading}、${waiting}、${stopped}、${downspeed}、${upspeed}。' },
     interval('titleRefreshInterval', '标题刷新间隔', 5000),

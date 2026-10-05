@@ -20,7 +20,7 @@ html = html.replace('<html ng-app="ariaNg">', '<html lang="zh-CN" ng-csp="no-uns
 const rpcMenu = '<ul class="dropdown-menu dropdown-menu-right rpcselect-dropdown" role="menu">';
 const from = html.indexOf(rpcMenu), to = html.indexOf('</ul>', from);
 if (from < 0 || to < from) throw new Error('Pinned AriaNg RPC menu no longer matches');
-html = html.slice(0, from) + rpcMenu + '<li ng-repeat="server in bridgeServers"><a class="pointer-cursor" ng-click="bridgeServerId = server.id; selectBridgeServer()" ng-bind="server.name"></a></li><li><a class="pointer-cursor" ng-click="openBridgeSettings()">设置与交接记录</a></li>' + html.slice(to);
+html = html.slice(0, from) + rpcMenu + '<li ng-repeat="server in bridgeServers"><a class="pointer-cursor" ng-click="bridgeServerId = server.id; selectBridgeServer()" ng-bind="server.name"></a></li><li><a class="pointer-cursor" ng-click="openBridgeSettings()" data-bridge-i18n>设置与交接记录</a></li>' + html.slice(to);
 // Avoid child-scope shadowing of the selected RPC id.
 html = html.replace('bridgeServerId = server.id; selectBridgeServer()', 'selectBridgeServer(server.id)');
 await writeFile(`${out}/manager/index.html`, html);

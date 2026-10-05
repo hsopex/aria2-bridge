@@ -42,3 +42,5 @@ baseline is a review aid, not a claim that the obsolete dependencies have underg
 an independent security audit. Unexpected warnings and all errors fail `pnpm lint`.
 The CSP prohibits executable inline code and eval. Do not relax it to restore a
 legacy feature. Re-review the baseline and run both Firefox versions when updating.
+
+- Interface language is a single plugin preference (`managerPreferences.language`), shared with native AriaNg. Simplified Chinese is the default; Simplified Chinese and English are exposed because both have complete bundled Bridge labels. Extension-owned adapter text is explicitly marked for localization; native AriaNg dictionaries and user content are left to their own renderers.

@@ -1,3 +1,4 @@
+import { translateText } from './core/language.js';
 import { ShortcutSettings, shortcutActions } from './core/shortcuts.js';
 import { toolbarState } from './core/toolbar.js';
 import { readPreferences, validatePreferencePatch } from './core/manager-preferences.js';
@@ -14,6 +15,7 @@ let shortcuts;
 let menuServerIds = [];
 let menuQueue = Promise.resolve();
 let managerPreferences;
+const t = value => translateText(value, managerPreferences?.language);
 let preferencesQueue = Promise.resolve();
 let verified = {};
 const disconnectedSummary = note => ({ connected: false, note, downloadSpeed: '0', uploadSpeed: '0' });
@@ -28,7 +30,7 @@ const server = id => config.servers.find(s => s.id === (id || config.defaultServ
 const notify = async note => {
   if (lastNotice === note) return;
   lastNotice = note;
-  await browser.notifications.create('handoff', { type: 'basic', iconUrl: browser.runtime.getURL('icon.svg'), title: 'Aria2 Bridge', message: note });
+  await browser.notifications.create('handoff', { type: 'basic', iconUrl: browser.runtime.getURL('icon.svg'), title: 'Aria2 Bridge', message: t(note) });
 };
 const handoff = new Handoff({ downloads: browser.downloads, journal, call: rpc, server, notify });
 const ready = (async () => {
@@ -42,16 +44,18 @@ const ready = (async () => {
   await journal.load();
   await browser.alarms.create('bridge-status', { periodInMinutes: 1 });
   await browser.menus.removeAll();
-  browser.menus.create({ id: 'send-link', title: '发送到 Aria2 Bridge', contexts: ['link'] });
-  browser.menus.create({ id: 'quick-actions', title: 'Aria2 Bridge 快捷操作', contexts: ['action'] });
-  for (const action of shortcutActions) browser.menus.create({ id: action.name, parentId: 'quick-actions', title: action.label, contexts: ['action'], ...(action.name === 'open-add' ? { command: '_execute_action' } : {}), ...(action.name === 'toggle-takeover' ? { type: 'checkbox', checked: config.enabled } : {}) });
-  browser.menus.create({ id: 'toggle-shortcuts', parentId: 'quick-actions', title: '启用功能快捷键', type: 'checkbox', checked: shortcuts.state.enabled, contexts: ['action'] });
-  browser.menus.create({ id: 'quick-rpc', parentId: 'quick-actions', title: '切换默认 RPC', contexts: ['action'] });
+  browser.menus.create({ id: 'send-link', title: t('发送到 Aria2 Bridge'), contexts: ['link'] });
+  browser.menus.create({ id: 'quick-actions', title: t('Aria2 Bridge 快捷操作'), contexts: ['action'] });
+  for (const action of shortcutActions) browser.menus.create({ id: action.name, parentId: 'quick-actions', title: t(action.label), contexts: ['action'], ...(action.name === 'open-add' ? { command: '_execute_action' } : {}), ...(action.name === 'toggle-takeover' ? { type: 'checkbox', checked: config.enabled } : {}) });
+  browser.menus.create({ id: 'toggle-shortcuts', parentId: 'quick-actions', title: t('启用功能快捷键'), type: 'checkbox', checked: shortcuts.state.enabled, contexts: ['action'] });
+  browser.menus.create({ id: 'quick-rpc', parentId: 'quick-actions', title: t('切换默认 RPC'), contexts: ['action'] });
   await syncMenus(true);
 })();
 
 function syncMenus(rebuild = false) {
   const work = menuQueue.then(async () => {
+    for (const [id, title] of [['send-link', '发送到 Aria2 Bridge'], ['quick-actions', 'Aria2 Bridge 快捷操作'], ['quick-rpc', '切换默认 RPC'], ['toggle-shortcuts', '启用功能快捷键'], ...shortcutActions.map(a => [a.name, a.label])]) await browser.menus.update(id, { title: t(title) });
+    for (const action of shortcutActions) await browser.commands.update({ name: action.name, description: t(action.label) });
     await browser.menus.update('toggle-takeover', { checked: config.enabled });
     await browser.menus.update('toggle-shortcuts', { checked: shortcuts.state.enabled });
     if (rebuild) {
@@ -95,7 +99,7 @@ browser.commands.onCommand.addListener(name => {
 function badge() {
   const work = badgeQueue.then(async () => {
     const pending = Object.values(journal.records).filter(r => activeStates.has(r.state) && r.state !== 'abandoned').length;
-    const state = toolbarState({ enabled: config.enabled, summary, pending, serverName: server().name });
+    const state = toolbarState({ enabled: config.enabled, summary, pending, serverName: server().name, translate: t });
     if (currentIcon !== state.icon) {
       await browser.action.setIcon({ path: state.icon });
       currentIcon = state.icon;
@@ -208,6 +212,7 @@ async function handle(message) {
         const next = { ...managerPreferences, ...patch };
         await browser.storage.local.set({ managerPreferences: { version: 1, options: next } });
         managerPreferences = next;
+        if (patch.language) { lastNotice = ''; syncMenus().then(badge).catch(report); }
         return next;
       });
       preferencesQueue = work.catch(() => {});
@@ -258,7 +263,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
   const root = browser.runtime.getURL('');
   if (sender.id !== browser.runtime.id || !sender.url?.startsWith(root) ||
     !['popup/index.html', 'options/index.html', 'manager/index.html'].includes(sender.url.slice(root.length).split(/[?#]/)[0])) return undefined;
-  return handle(message).then(data => ({ ok: true, data }), error => ({ ok: false, error: error.message }));
+  return handle(message).then(data => ({ ok: true, data }), error => ({ ok: false, error: t(error.message), sourceError: error.message }));
 });
 
 const filter = { urls: ['http://*/*', 'https://*/*'] };
