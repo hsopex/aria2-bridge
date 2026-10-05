@@ -12,6 +12,7 @@
 | 场景 | 验证方式／结果 |
 | --- | --- |
 | Firefox 140.0／157.0 加载 | 在全新临时 profile 安装未签名包，两者通过 |
+| 设置界面与主题 | 两个 Firefox 版本验证浅色／深色／跟随系统选项保存、刷新后恢复、弹出页共享主题、窄窗口无横向溢出，以及新增／切换／删除默认 RPC 后保存，通过 |
 | AriaNg CSP 与模板 | 真实 Firefox 中完成 Angular CSP bootstrap、任务列表、新建、等待、完成、基本设置、状态路由渲染，通过 |
 | 标签页与侧栏 | 实际 SidebarController 打开原生侧栏，同一管理文档与后台配置；管理标签页真实 RPC 连接通过 |
 | HTTP RPC、错误 Secret | 两个独立临时 aria2 进程；正确 Secret 连通，错误 Secret 拒绝且不能开启接管，通过 |
@@ -31,7 +32,7 @@
 | 远端轮换 Secret | code 1 不直接当成 GID 不存在，先验证授权；恢复不误判，通过 |
 | Secret 保护 | 默认导出清空 Secret；RPC POST、省略请求站点 Cookie、拒绝 RPC 重定向；日志／持久化交接不含凭证，通过 |
 
-实机脚本：`scripts/firefox-smoke.mjs`。进程禁用 aria2 用户配置，使用临时 Firefox profile、独立测试 Secret、临时下载目录；结束后删除临时数据。脚本会保留管理页截图到 `dist/validation/`。不需要真实账户或用户的下载服务。
+实机脚本：`scripts/firefox-smoke.mjs`。进程禁用 aria2 用户配置，使用临时 Firefox profile、独立测试 Secret、临时下载目录；结束后删除临时数据。脚本会保留管理页与设置页的浅色／深色／窄窗口截图到 `dist/validation/`。不需要真实账户或用户的下载服务。
 
 ## 发布前人工验收
 

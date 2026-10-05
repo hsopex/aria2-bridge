@@ -1,74 +1,167 @@
-import { $, send, showHandoffs, textStatus } from './common.js';
+import { $, send, showHandoffs } from './common.js';
+import { setTheme } from './theme.js';
 let config;
-const field = (label, value, type = 'text') => {
-  const node = document.createElement('label'); const title = document.createElement('span'); title.textContent = label;
-  const input = document.createElement('input'); input.type = type;
-  if (type === 'checkbox') input.checked = value; else input.value = value;
-  node.append(title, input); return { node, input };
-};
+let dirty = false;
+let busy = false;
 const editors = new Map();
+function status(message, kind = 'success') {
+  $('#status').textContent = message;
+  $('#status').dataset.kind = kind;
+}
+function setDirty(value) {
+  dirty = value;
+  $('#save-state').textContent = value ? '有未保存的更改' : '连接与规则已保存';
+  $('#save-state').dataset.state = value ? 'dirty' : 'saved';
+}
+function field(label, value, type = 'text', hint = '') {
+  const node = document.createElement('label'); node.className = 'field';
+  const title = document.createElement('span'); title.textContent = label;
+  const input = document.createElement('input'); input.type = type;
+  if (['checkbox', 'radio'].includes(type)) {
+    input.checked = value; node.classList.add('toggle'); node.append(input, title);
+  } else { input.value = value; node.append(title, input); }
+  if (hint) {
+    const help = document.createElement('small'); help.className = 'field-hint'; help.textContent = hint;
+    help.id = `hint-${crypto.randomUUID()}`; input.setAttribute('aria-describedby', help.id); node.append(help);
+  }
+  return { node, input };
+}
+function updateTitles() {
+  for (const [id, e] of editors) {
+    e.title.textContent = e.inputs.name.value.trim() || '未命名服务';
+    e.badge.hidden = config.defaultServerId !== id;
+    e.card.classList.toggle('is-default', config.defaultServerId === id);
+  }
+}
 function render() {
   editors.clear(); $('#servers').replaceChildren();
   for (const server of config.servers) {
-    const card = document.createElement('fieldset'); const legend = document.createElement('legend'); legend.textContent = server.name;
-    card.append(legend);
+    const card = document.createElement('fieldset'); card.className = 'server-card';
+    const legend = document.createElement('legend'); const title = document.createElement('span');
+    const badge = document.createElement('span'); badge.className = 'default-badge'; badge.textContent = '默认';
+    legend.append(title, badge); card.append(legend);
+    const grid = document.createElement('div'); grid.className = 'server-grid';
     const inputs = {};
-    for (const [key, label, type] of [['name', '服务名称', 'text'], ['url', 'HTTP(S) JSON-RPC 地址', 'url'], ['secret', 'Secret（仅保存在本地）', 'password'], ['dir', '默认目录（aria2 所在机器的路径）', 'text'], ['forwardCookies', '向此服务转发 Cookie（仅来源可靠时）', 'checkbox']]) {
-      const f = field(label, server[key], type); inputs[key] = f.input; card.append(f.node);
+    for (const [key, label, type, hint] of [
+      ['name', '服务名称', 'text', '给这台 aria2 起一个易于识别的名字。'],
+      ['url', 'RPC 地址', 'url', 'HTTP(S) JSON-RPC，例如 http://127.0.0.1:6800/jsonrpc'],
+      ['secret', 'RPC Secret', 'password', '未设置 Secret 时可留空。'],
+      ['dir', '默认下载目录', 'text', 'aria2 所在机器的路径，留空使用服务默认目录。'],
+    ]) {
+      const f = field(label, server[key], type, hint); inputs[key] = f.input; grid.append(f.node);
     }
-    inputs.secret.autocomplete = 'new-password';
-    const selected = field('默认服务', config.defaultServerId === server.id, 'radio');
-    selected.input.name = 'default-server'; selected.input.checked = config.defaultServerId === server.id;
-    selected.input.addEventListener('change', () => { config.defaultServerId = server.id; });
-    card.append(selected.node);
-    const test = document.createElement('button'); test.type = 'button'; test.textContent = '保存并测试连接';
-    test.addEventListener('click', async () => {
-      test.disabled = true;
-      try { await save(); const v = await send('TEST', { serverId: server.id }); textStatus(`连接成功 · aria2 ${v.version}`); }
-      catch (e) { textStatus(e.message); } finally { test.disabled = false; }
-    });
-    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'secondary'; remove.textContent = '删除服务';
+    inputs.name.maxLength = 80; inputs.secret.autocomplete = 'new-password'; inputs.url.required = true;
+    inputs.name.placeholder = '例如：家里的 NAS'; inputs.url.placeholder = 'http://127.0.0.1:6800/jsonrpc'; inputs.dir.placeholder = '/downloads';
+    card.append(grid);
+    const toggles = document.createElement('div'); toggles.className = 'server-toggles';
+    const selected = field('设为默认服务', config.defaultServerId === server.id, 'radio');
+    selected.input.name = 'default-server'; selected.input.value = server.id;
+    selected.input.addEventListener('change', () => { config.defaultServerId = server.id; updateTitles(); });
+    const cookies = field('转发来源 Cookie', server.forwardCookies, 'checkbox'); inputs.forwardCookies = cookies.input;
+    toggles.append(selected.node, cookies.node); card.append(toggles);
+    const footer = document.createElement('div'); footer.className = 'server-footer';
+    const test = document.createElement('button'); test.type = 'button'; test.className = 'secondary'; test.textContent = '保存并测试连接';
+    const feedback = document.createElement('span'); feedback.className = 'server-feedback'; feedback.setAttribute('role', 'status'); feedback.textContent = '尚未测试';
+    test.addEventListener('click', () => persist(server.id).catch(e => status(e.message, 'error')));
+    for (const key of ['url', 'secret']) inputs[key].addEventListener('input', () => { feedback.textContent = '配置已修改，请重新测试'; delete feedback.dataset.kind; });
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'danger'; remove.textContent = '删除'; remove.dataset.action = 'remove';
+    remove.disabled = config.servers.length === 1;
     remove.addEventListener('click', () => {
+      if (config.servers.length === 1) return;
       read(); config.servers = config.servers.filter(s => s.id !== server.id);
-      if (!config.servers.length) { textStatus('至少保留一个 RPC 服务'); config.servers = [server]; }
       if (config.defaultServerId === server.id) config.defaultServerId = config.servers[0].id;
-      render();
+      render(); setDirty(true); status('服务已从编辑列表移除，保存后生效');
     });
-    card.append(test, remove); $('#servers').append(card); editors.set(server.id, inputs);
+    footer.append(test, feedback, remove); card.append(footer);
+    $('#servers').append(card); editors.set(server.id, { inputs, card, title, badge, feedback });
   }
   $('#enabled').checked = config.enabled;
   for (const key of ['allowDomains', 'denyDomains', 'allowExtensions', 'denyExtensions']) $(`#${key}`).value = config.filters[key].join('\n');
+  updateTitles(); setBusy(false);
 }
 function read() {
   config = { ...config, enabled: $('#enabled').checked,
-    servers: config.servers.map(s => { const e = editors.get(s.id); return { ...s, ...Object.fromEntries(Object.entries(e).map(([key, input]) => [key, input.type === 'checkbox' ? input.checked : input.value])) }; }),
+    servers: config.servers.map(s => { const e = editors.get(s.id).inputs; return { ...s, ...Object.fromEntries(Object.entries(e).map(([key, input]) => [key, input.type === 'checkbox' ? input.checked : input.value])) }; }),
     filters: Object.fromEntries(['allowDomains', 'denyDomains', 'allowExtensions', 'denyExtensions'].map(key => [key, $(`#${key}`).value.split(/[\n,]/).map(v => v.trim()).filter(Boolean)])),
   };
 }
-async function save() { read(); config = await send('CONFIG_SAVE', { config }); textStatus('配置已保存'); }
-async function handoffs() { showHandoffs(await send('HANDOFFS'), $('#handoffs'), handoffs); }
-$('#settings').addEventListener('submit', event => { event.preventDefault(); save().catch(e => textStatus(e.message)); });
+function setBusy(value) {
+  busy = value;
+  for (const control of document.querySelectorAll('#settings input, #settings textarea, #settings button, #save')) control.disabled = value;
+  if (!value) for (const button of document.querySelectorAll('[data-action="remove"]')) button.disabled = config.servers.length === 1;
+  $('#save').textContent = value ? '正在保存…' : '保存设置';
+}
+async function persist(testId) {
+  if (busy || !config) return;
+  if (!$('#settings').reportValidity()) return;
+  read(); setBusy(true);
+  const feedback = testId ? editors.get(testId).feedback : null;
+  if (feedback) { feedback.textContent = '正在保存并连接…'; delete feedback.dataset.kind; }
+  try {
+    config = await send('CONFIG_SAVE', { config }); $('#enabled').checked = config.enabled; setDirty(false); updateTitles(); status('配置已保存');
+    if (testId) {
+      const v = await send('TEST', { serverId: testId });
+      feedback.textContent = `连接成功 · aria2 ${v.version}`; feedback.dataset.kind = 'success'; status('连接成功，现在可以启用自动接管');
+    }
+  } catch (error) {
+    if (feedback) { feedback.textContent = error.message; feedback.dataset.kind = 'error'; }
+    throw error;
+  } finally { setBusy(false); }
+}
+async function handoffs() {
+  showHandoffs(await send('HANDOFFS'), $('#handoffs'), handoffs);
+  if (!$('#handoffs').querySelector('article')) $('#handoffs').classList.add('empty-state');
+  else $('#handoffs').classList.remove('empty-state');
+}
+$('#settings').addEventListener('input', () => { if (config && !busy) { setDirty(true); updateTitles(); $('#status').textContent = ''; } });
+$('#settings').addEventListener('change', () => { if (config && !busy) setDirty(true); });
+$('#settings').addEventListener('submit', event => { event.preventDefault(); persist().catch(e => status(e.message, 'error')); });
 $('#new').addEventListener('click', () => {
-  read(); config.servers.push({ id: crypto.randomUUID(), name: '新服务', url: 'http://127.0.0.1:6800/jsonrpc', secret: '', dir: '', forwardCookies: false }); render();
+  if (!config || busy) return;
+  read();
+  if (config.servers.length >= 20) { status('最多可配置 20 个服务', 'error'); return; }
+  const id = crypto.randomUUID();
+  config.servers.push({ id, name: '新服务', url: 'http://127.0.0.1:6800/jsonrpc', secret: '', dir: '', forwardCookies: false });
+  render(); setDirty(true); editors.get(id).inputs.name.focus();
+});
+$('#theme').addEventListener('change', async () => {
+  $('#theme').disabled = true;
+  try { await setTheme($('#theme').value); status('界面主题已自动保存'); }
+  catch { status('主题保存失败，请重试', 'error'); }
+  finally { $('#theme').disabled = false; }
 });
 $('#export').addEventListener('click', async () => {
   try {
     const result = await send('CONFIG_EXPORT');
-    const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' }));
     const a = document.createElement('a'); a.href = url; a.download = 'aria2-bridge-config.json'; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-    textStatus('已导出，不包含 Secret；自动接管设为关闭');
-  } catch (e) { textStatus(e.message); }
+    setTimeout(() => URL.revokeObjectURL(url), 60000); status('已导出保存的配置，不包含 Secret；导出文件中自动接管为关闭');
+  } catch (e) { status(e.message, 'error'); }
 });
 $('#import').addEventListener('change', async event => {
   try {
+    if (busy) throw new Error('请等待当前保存操作结束');
     const file = event.target.files[0]; if (!file || file.size > 100000) throw new Error('配置文件过大');
     const input = JSON.parse(await file.text());
-    config = await send('CONFIG_SAVE', { config: { ...input, enabled: false } }); render(); textStatus('已导入，请填写 Secret 并测试连接');
-  } catch (e) { textStatus(e.message); }
-  finally { event.target.value = ''; }
+    setBusy(true);
+    config = await send('CONFIG_SAVE', { config: { ...input, enabled: false } }); render(); setDirty(false); status('已导入，请填写 Secret 并测试连接');
+  } catch (e) { status(e.message, 'error'); }
+  finally { if (config) setBusy(false); event.target.value = ''; }
 });
-$('#manager').addEventListener('click', () => send('OPEN_MANAGER').catch(e => textStatus(e.message)));
-$('#refresh-handoffs').addEventListener('click', () => handoffs().catch(e => textStatus(e.message)));
-send('CONFIG_GET').then(data => { config = data; render(); return handoffs(); }).catch(e => textStatus(e.message));
+$('#manager').addEventListener('click', () => send('OPEN_MANAGER').catch(e => status(e.message, 'error')));
+$('#refresh-handoffs').addEventListener('click', async () => {
+  $('#refresh-handoffs').disabled = true;
+  try { await handoffs(); } catch (e) { status(e.message, 'error'); }
+  finally { $('#refresh-handoffs').disabled = false; }
+});
+function navigation() {
+  const current = location.hash || '#appearance';
+  for (const link of document.querySelectorAll('.settings-sidebar nav a')) {
+    if (link.getAttribute('href') === current) link.setAttribute('aria-current', 'location'); else link.removeAttribute('aria-current');
+  }
+}
+window.addEventListener('hashchange', navigation); navigation();
+window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
+send('CONFIG_GET').then(async data => {
+  config = data; render(); setDirty(false); $('#export').disabled = false; $('#import').disabled = false; await handoffs();
+}).catch(e => status(e.message, 'error'));

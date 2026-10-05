@@ -74,6 +74,37 @@ try {
   await request(route('/moz/context'), { context: 'content' });
   await navigate(base + 'options/index.html');
   await until(() => execute('return document.querySelectorAll("#servers fieldset").length'), n => n === 1, 'settings rendered');
+  await mkdir('dist/validation', { recursive: true });
+  for (const theme of ['light', 'dark']) {
+    await execute('const select=document.querySelector("#theme"); select.value=arguments[0]; select.dispatchEvent(new Event("change",{bubbles:true}));', [theme]);
+    await until(() => request(route('/execute/async'), { script: 'const done=arguments[arguments.length-1]; browser.storage.local.get("appearance").then(v=>done(v.appearance?.theme));', args: [] }), t => t === theme, 'theme persisted');
+    assert.equal(await execute('return document.documentElement.dataset.theme'), theme);
+    await writeFile(`dist/validation/firefox-${created.capabilities.browserVersion}-settings-${theme}.png`, Buffer.from(await request(route('/screenshot'), undefined, 'GET'), 'base64'));
+  }
+  await navigate(base + 'options/index.html');
+  await until(() => execute('return document.querySelector("#theme").value'), value => value === 'dark', 'theme restored');
+  await request(route('/moz/context'), { context: 'chrome' });
+  await execute('Services.wm.getMostRecentWindow("navigator:browser").SidebarController.hide();');
+  await request(route('/moz/context'), { context: 'content' });
+  // Firefox desktop enforces a 500px minimum outer window width.
+  await request(route('/window/rect'), { width: 500, height: 844 });
+  await until(() => execute('return window.innerWidth'), width => width >= 450 && width <= 510, 'narrow viewport resize');
+  const narrow = await execute('return {width:innerWidth, scroll:document.documentElement.scrollWidth, overflow:[...document.querySelectorAll("body *")].filter(e=>e.getBoundingClientRect().right>innerWidth).map(e=>({tag:e.tagName,cls:e.className,id:e.id,right:e.getBoundingClientRect().right}))}');
+  assert.ok(narrow.scroll <= narrow.width, `settings fit narrow viewport: ${JSON.stringify(narrow)}`);
+  await writeFile(`dist/validation/firefox-${created.capabilities.browserVersion}-settings-mobile.png`, Buffer.from(await request(route('/screenshot'), undefined, 'GET'), 'base64'));
+  await request(route('/window/rect'), { width: 1280, height: 900 });
+  await until(() => execute('return !document.querySelector("#new").disabled'), Boolean, 'settings ready');
+  await execute('document.querySelector("#new").click(); const cards=document.querySelectorAll(".server-card"); cards[1].querySelector("input[type=radio]").click(); cards[1].querySelector("[data-action=remove]").click();');
+  assert.ok(await execute('return document.querySelector(".server-card input[type=radio]").checked'), 'default follows remaining server');
+  assert.equal(await execute('return document.querySelector("#save-state").dataset.state'), 'dirty');
+  await execute('document.querySelector("#save").click();');
+  await until(() => execute('return document.querySelector("#save-state").dataset.state'), state => state === 'saved', 'settings saved');
+  await navigate(base + 'popup/index.html');
+  await until(() => execute('return document.documentElement.dataset.theme'), theme => theme === 'dark', 'popup shares theme');
+  await navigate(base + 'options/index.html');
+  await execute('const select=document.querySelector("#theme"); select.value="system"; select.dispatchEvent(new Event("change",{bubbles:true}));');
+  await until(() => request(route('/execute/async'), { script: 'const done=arguments[arguments.length-1]; browser.storage.local.get("appearance").then(v=>done(v.appearance?.theme));', args: [] }), theme => theme === 'system', 'system theme saved');
+  console.log(`Firefox ${created.capabilities.browserVersion}: settings light/dark/system, reload persistence, popup theme, narrow layout and default-service editing passed`);
   let config = await message('CONFIG_GET');
   config.servers[0] = { ...config.servers[0], url: `http://127.0.0.1:${rpcPort}/jsonrpc`, secret, dir: `${temp}/aria2`, forwardCookies: true };
   await message('CONFIG_SAVE', { config });

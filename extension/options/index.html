@@ -1,23 +1,50 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aria2 Bridge 设置</title><link rel="stylesheet" href="../styles.css"><script src="options.js" defer></script></head>
-<body class="options"><main>
-<h1>Aria2 Bridge 设置</h1>
-<p>文件保存到 aria2 所在机器。Secret 保存在此 Firefox 配置中，导出文件不包含 Secret。开启 Cookie 转发后，登录凭证会发送给选定的 RPC 服务。</p>
-<form id="settings">
-<div id="servers"></div><button id="new" type="button" class="secondary">添加 RPC 服务</button>
-<fieldset><legend>自动接管</legend>
-<label class="toggle"><input id="enabled" type="checkbox"> 启用（请先成功测试默认 RPC）</label>
-<p>仅接管来源明确的 HTTP(S) GET 下载；隐私窗口、POST 和无法可靠确认登录态的任务继续由 Firefox 下载。排除规则优先，允许列表为空时不限制。</p>
-<div class="filters">
-<label>允许域名<textarea id="allowDomains" rows="3" placeholder="example.com&#10;*.example.org"></textarea></label>
-<label>排除域名<textarea id="denyDomains" rows="3"></textarea></label>
-<label>允许扩展名<textarea id="allowExtensions" rows="3" placeholder="zip&#10;tar.gz"></textarea></label>
-<label>排除扩展名<textarea id="denyExtensions" rows="3" placeholder="pdf"></textarea></label>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Aria2 Bridge 设置</title><script src="../theme.js"></script><link rel="stylesheet" href="../styles.css"><script src="options.js" defer></script></head>
+<body class="options">
+<div class="settings-shell">
+  <aside class="settings-sidebar">
+    <a class="brand" href="#appearance"><img src="../icon.svg" width="32" height="32" alt=""><span>Aria2 Bridge<small>Firefox 下载助手</small></span></a>
+    <nav aria-label="设置导航">
+      <a href="#appearance">外观</a><a href="#rpc">RPC 服务</a><a href="#takeover">下载接管</a><a href="#filters">过滤规则</a><a href="#data">配置备份</a><a href="#history">交接记录</a>
+    </nav>
+    <p class="sidebar-note">文件保存到 aria2 所在机器，而非当前浏览器的下载目录。</p>
+  </aside>
+  <main class="settings-content">
+    <header class="page-header"><div><p class="eyebrow">偏好设置</p><h1>让下载按你的方式运行</h1><p>管理连接、下载接管与界面外观。</p></div><button id="manager" type="button" class="secondary">打开 AriaNg <span aria-hidden="true">↗</span></button></header>
+    <section id="appearance" class="settings-section">
+      <div class="section-heading"><div><h2>外观</h2><p>选择适合你的界面主题，修改后立即生效。</p></div><span class="section-tag">自动保存</span></div>
+      <div class="appearance-row"><label class="field" for="theme"><span>界面主题</span><select id="theme"><option value="system">跟随系统</option><option value="light">浅色模式</option><option value="dark">深色模式</option></select></label><p class="field-hint">主题应用于设置页与工具栏弹出页。跟随系统时，界面会随系统外观切换。</p></div>
+    </section>
+    <form id="settings">
+      <section id="rpc" class="settings-section">
+        <div class="section-heading"><div><h2>RPC 服务</h2><p>连接已有的 aria2，可添加多个服务并指定默认连接。</p></div><button id="new" type="button" class="secondary" disabled><span aria-hidden="true">＋</span> 添加服务</button></div>
+        <div id="servers"><p class="empty-state">正在加载连接配置…</p></div>
+        <div class="info-note">Secret 仅保存在当前 Firefox 配置中，不包含在导出文件里。开启 Cookie 转发后，登录凭证会发送给选定的 RPC 服务。</div>
+      </section>
+      <section id="takeover" class="settings-section">
+        <div class="section-heading"><div><h2>下载接管</h2><p>将符合条件的浏览器下载交给默认 aria2 服务。</p></div></div>
+        <label class="switch-row"><span><strong>自动接管下载</strong><small>请先成功测试默认 RPC，再启用此选项。</small></span><input id="enabled" type="checkbox" role="switch" disabled></label>
+        <p class="field-hint">仅接管来源明确的 HTTP(S) GET 下载。隐私窗口、POST 和无法可靠确认登录态的任务继续由 Firefox 下载。</p>
+      </section>
+      <section id="filters" class="settings-section">
+        <div class="section-heading"><div><h2>过滤规则</h2><p>排除规则优先；允许列表为空时不限制。每行或逗号分隔。</p></div></div>
+        <div class="filters">
+          <label class="field"><span>允许域名</span><textarea id="allowDomains" rows="3" disabled placeholder="example.com&#10;*.example.org"></textarea><small class="field-hint">精确域名或 *.域名，仅匹配子域名。</small></label>
+          <label class="field"><span>排除域名</span><textarea id="denyDomains" rows="3" disabled placeholder="internal.example.com"></textarea><small class="field-hint">这些站点的下载继续由浏览器处理。</small></label>
+          <label class="field"><span>允许扩展名</span><textarea id="allowExtensions" rows="3" disabled placeholder="zip&#10;tar.gz"></textarea><small class="field-hint">忽略大小写，支持 tar.gz 等复合扩展名。</small></label>
+          <label class="field"><span>排除扩展名</span><textarea id="denyExtensions" rows="3" disabled placeholder="pdf"></textarea><small class="field-hint">即使符合允许规则，也不会接管。</small></label>
+        </div>
+      </section>
+    </form>
+    <section id="data" class="settings-section">
+      <div class="section-heading"><div><h2>配置备份</h2><p>导出已保存的配置，或从 JSON 文件恢复。导入会替换现有服务与规则。</p></div></div>
+      <div class="section-actions"><button id="export" type="button" class="secondary" disabled>导出配置</button><label class="file-button secondary">导入配置<input id="import" type="file" accept="application/json,.json" disabled></label></div><p class="field-hint">导出文件不包含 Secret，自动接管默认关闭。导入后请重新填写 Secret 并测试连接。</p>
+    </section>
+    <section id="history" class="settings-section">
+      <div class="section-heading"><div><h2>交接记录</h2><p>核对下载去向，处理尚未确认的交接。</p></div><button id="refresh-handoffs" type="button" class="secondary">刷新记录</button></div>
+      <p class="field-hint">待确认时不会重复提交。继续浏览器下载前会核对并停止 aria2 任务；原任务不能恢复时，请从原页面重试。</p><div id="handoffs"></div>
+    </section>
+  </main>
 </div>
-</fieldset><button type="submit">保存设置</button>
-</form>
-<p id="status" role="status"></p>
-<nav><button id="manager" type="button">打开 AriaNg</button><button id="export" type="button" class="secondary">导出配置</button><label>导入配置 <input id="import" type="file" accept="application/json,.json"></label></nav>
-<h2>下载交接记录</h2><p>“交接待确认”时不会重复提交。继续浏览器下载前会核对并停止 aria2 任务。原任务不能恢复时，请从原页面重试。</p>
-<button id="refresh-handoffs" type="button" class="secondary">刷新记录</button><div id="handoffs"></div>
-</main></body></html>
+<footer class="save-bar"><div class="save-feedback"><span id="save-state" data-state="loading">正在加载设置…</span><p id="status" role="status" aria-live="polite"></p></div><button id="save" type="submit" form="settings" disabled>保存设置</button></footer>
+</body></html>
